@@ -96,7 +96,7 @@ def train(args: argparse.Namespace):
         for data_tuple in train_iterator:
             optimizer.zero_grad()
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
-            print([i.shape for i in data])
+ #           print([i.shape for i in data])
             out = model(*data)
 #            print(f"target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
@@ -168,8 +168,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
 
-    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=64', "--network=DeepMedic", "--n_epoch=100", "--l_rate=5e-3",
-                "--losses=[('GeneralizedDice', {'idc':[3]}, 1)]" , "--save_as=First_deepmed", "--debug"] #"--restore_from=RESULTS/First_unet"
+    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=100", "--l_rate=5e-3",
+                "--losses=[('GeneralizedDice', {'idc':[2,3,4,5,6]}, 1)]" , "--save_as=Second_unet", "--debug"] #"--restore_from=RESULTS/First_unet"
 
     args = parser.parse_args()
     print(args)
