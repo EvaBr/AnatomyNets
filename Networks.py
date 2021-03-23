@@ -5,6 +5,8 @@ from torchvision import transforms as tsf
 from torch.utils import model_zoo
 from collections import OrderedDict
 import torch.nn.functional as F
+import Extractors
+import math
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -114,10 +116,10 @@ class UNet(nn.Module):
 class Pathway(nn.Module):
     def __init__(self, in_channels):
         super(Pathway, self).__init__()
-        self.block1 = DoubleConv(in_channels, 30)
-        self.block2 = DoubleConv(30, 40)
-        self.block3 = DoubleConv(40, 40)
-        self.block4 = DoubleConv(40, 50)
+        self.block1 = DoubleConv(in_channels, 30, padding=0)
+        self.block2 = DoubleConv(30, 40, padding=0)
+        self.block3 = DoubleConv(40, 40, padding=0)
+        self.block4 = DoubleConv(40, 50, padding=0)
 
     def forward(self, x):
         x = self.block1(x)
@@ -138,7 +140,7 @@ class DeepMedic(nn.Module):
 
         #self.upsample = nn.ConvTranspose2d(50, 50, kernel_size=2, stride=2)
         self.final = nn.Sequential(
-            DoubleConv(100, 150, kernel_size=1),
+            DoubleConv(100, 150, kernel_size=1, padding=0),
             nn.Conv2d(150, n_classes, kernel_size=1),
             nn.Softmax(dim=1)
         )
@@ -167,7 +169,10 @@ class PyramidPooling(nn.Module):
         self.level3 = self.get_level(3)
         self.level4 = self.get_level(6)
 
-        self.final = nn.Conv2d(in_channels+channels_per_pool*4, out_channels, kernel_size=1)
+        self.final = nn.Sequential(
+            nn.Conv2d(self.in_channels+self.channels_per_pool*4, self.out_channels, kernel_size=1),
+            nn.ReLU()
+        )
     
     def get_level(self, size):
         level = nn.Sequential(
@@ -208,18 +213,26 @@ class PSPNet(nn.Module):
     def __init__(self, in_channels, n_classes, dummy=None, extractor_net='resnet34'):
         super(PSPNet, self).__init__()
 
-        self.in_channels = in_channels
+        self.in_channels = in_channels #the in_channels of the img! 
+        #here the in_channels are the expected nr of channels of an image.... RESNET has 3 by default! 
+        # so we need to add additional layer before resnet, to get to appropriate nr of channels... [any better ideas???]
+        self.prelayer = nn.Conv2d(self.in_channels, 3, kernel_size=1) #try also kernelSize=3?
+
         self.n_classes = n_classes
         self.get_features = self.get_pretrained(extractor_net)
 
-        self.PSPmodule = PyramidPooling(in_channels, in_channels)
+        #the in_channels from the extractor net into PSP part:
+        in_from_extractor = 512
+        if extractor_net=='resnet101':
+            in_from_extractor = 2048
+        self.PSPmodule = PyramidPooling(in_from_extractor, 1024)
         self.PSPdrop = nn.Dropout2d(p=0.3)
         self.to_orig_size = nn.Sequential(
-            UpsamplingConv(in_channels, 512),
+            UpsamplingConv(1024, 512),
             nn.Dropout2d(p=0.15),
-            UpsamplingConv(512, 256),
+            UpsamplingConv(512, 128),
             nn.Dropout2d(p=0.15),
-            UpsamplingConv(256, 64),
+            UpsamplingConv(128, 64),
             nn.Dropout2d(p=0.15)   #do we need all these dropouts?
         )
         self.final = nn.Sequential( 
@@ -228,9 +241,10 @@ class PSPNet(nn.Module):
         )
 
     def get_pretrained(self, network, pretrained=True):
-        return globals()[network](pretrained)
-
+        return getattr(Extractors, network)(pretrained) # globals()[network](pretrained)
+        
     def forward(self, x):
+        x = self.prelayer(x)
         feats, for_deep_loss = self.get_features(x) #here we assume the output size will be 1/8 of original img size
         #for now we don't use the auxiliary loss to improve training. so ignore for_deep_loss. 
         x = self.PSPmodule(feats)
@@ -239,7 +253,11 @@ class PSPNet(nn.Module):
         return self.final(x)
 
 
+
+
+################################# Below implem. of RESNETS doesnt work with pretraining (name&size mismatch)
 class ResidualConvBlock(DoubleConv):
+    expansion = 1
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, downsample=None, dilation=1):
         super(ResidualConvBlock, self).__init__(in_channels, out_channels, stride=stride, dilation=dilation, padding=dilation, kernel_size=kernel_size)
 
@@ -299,15 +317,11 @@ class DilatedResNet(nn.Module):
         return x, y #return both for deep loss
 
     
-
-
 #################loading pretrained nets
 
 def load_weights_sequential(target, source_state):
-    new_dict = OrderedDict()
-    for (k1, v1), (k2, v2) in zip(target.state_dict().items(), source_state.items()):
-        new_dict[k1] = v2
-    target.load_state_dict(new_dict)
+    model_to_load= {k: v for k, v in source_state.items() if k in target.state_dict().keys()}
+    target.load_state_dict(model_to_load)
 
 
 def resnet18(pretrained=True):

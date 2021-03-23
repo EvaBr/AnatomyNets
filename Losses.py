@@ -61,6 +61,8 @@ def DicePerClass(probs: Tensor, target: Tensor):
     intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
     union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
 
-    divided: Tensor = 2 * (intersection + 1e-10) / (union + 1e-10)
+    divided: Tensor = torch.clamp(2 * (intersection + 1e-10) / (union + 1e-10), max=1.) 
+    #occasionally, if class neither in GT nor OUT in the whole batch, the output might be 2 -.- => clamping needed. (IS IT ENOUGH?)
+
     loss = divided.mean(dim=0) #average over batch. Output size should be C=nb_classes
     return loss

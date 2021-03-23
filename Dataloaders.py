@@ -11,8 +11,8 @@ def get_loaders(net, dataset, batch_size, debug):
     if net=="DeepMedic":
         dub = True
 
-    data_train = DataOut(f"{dataset}/TRAIN", debug=debug, double=dub)
-    data_val = DataOut(f"{dataset}/VAL", debug=debug, double=dub)
+    data_train = DataOut(f"{dataset}/TRAIN", debug=debug, double=dub, batch_size=batch_size)
+    data_val = DataOut(f"{dataset}/VAL", debug=debug, double=dub,  batch_size=batch_size)
 
     train_loader = data.DataLoader(data_train, batch_size=batch_size, shuffle=True, collate_fn=multi_collate)
     val_loader = data.DataLoader(data_val, batch_size=batch_size, collate_fn=multi_collate)
@@ -21,12 +21,12 @@ def get_loaders(net, dataset, batch_size, debug):
 
 
 class DataOut(data.Dataset):
-    def __init__(self, folder, debug=False, double=False):
+    def __init__(self, folder, debug=False, double=False,  batch_size=32):
         self.folder = folder
         self.files = listdir(f"{folder}/gt/")  #assume all folders, gt, in1, in2, have same file names
         self.double = double
         if debug:
-            self.files = self.files[:150]
+            self.files = self.files[:batch_size*5]
     
     def __len__(self):
         'total number of samples'

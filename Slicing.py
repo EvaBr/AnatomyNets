@@ -33,8 +33,12 @@ def check2Dcuts(pid, inp2=False):
         plt.subplot(1,3,3)
         plt.imshow(np.squeeze(in2[0,...]))
     plt.show()
-    
+   
 #%%
+check2Dcuts("500077_30_0", True)
+check2Dcuts("500077_30_1", True)
+check2Dcuts("500297_30_0", True)
+check2Dcuts("500297_30_1", True)
 ####################################
 
 

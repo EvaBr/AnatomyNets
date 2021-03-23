@@ -12,10 +12,35 @@ import numpy as np
 import os
 np.set_printoptions(precision=3, suppress=True)
 
+def CenterCropTensor(tgt, x):
+    xs2, xs3 = x.shape[2], x.shape[3]
+    tg2, tg3 = tgt.shape[2], tgt.shape[3]
+    diffY = abs(xs2 - tg2)//2
+    diffX = abs(xs3 - tg3)//2
+    ostanek = abs(xs2-tg2)%2
+    
+    if xs2>tg2: 
+        x = x[..., diffX:xs2-diffX-ostanek, diffY:xs3-diffY-ostanek]
+    else: 
+        tgt = tgt[..., diffX:tg2-diffX-ostanek, diffY:tg3-diffY-ostanek] 
+    return tgt, x
+
 def save_run(train_m, val_m, model, optimizer, save_to, epoch):
+    """Saves the final state of network for realoading, and CSV of metrics, and a txt file of args used for the run."""
+
     if not os.path.exists('RESULTS'):
         os.mkdir('RESULTS')
-    pd.DataFrame({**train_m, **val_m}).to_csv(f'RESULTS/{save_to}.csv')
+    df = pd.DataFrame({**train_m, **val_m})
+    cols = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
+    cols_v = [f"val_{c}" for c in cols]
+    df = pd.concat([df['Loss'], pd.DataFrame(df['Dice'].values.tolist(), columns=cols), 
+                df['val_Loss'], pd.DataFrame(df['val_Dice'].values.tolist(), columns=cols_v)], axis=1)
+    with open(f'RESULTS/{save_to}.csv', 'a') as f:
+        df.to_csv(f, header=f.tell()==0)  #OBS if file exists, it will only append data. 
+    with open(f'RESULTS/{save_to}_args.txt', 'a') as f:
+        f.write('\n'.join(sys.argv[1:]))
+        f.write('\n########################\n') #to separate args of diff. runs, if net reloaded and rerun
+
     torch.save({'epoch': epoch,
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict()}, f'RESULTS/{save_to}')
@@ -48,7 +73,7 @@ def setup(args: argparse.Namespace):
     model = net.to(device)
     #loss = MultiTaskLoss(args.losses)
     #loss = GeneralizedDice(**{'idc': [0,1,2,3,4,5,6]})
-    #loss1 = CrossEntropy(**{'idc': [0]})
+    #loss = CrossEntropy(**{'idc': [0]})
     loss = GeneralizedDice(**{'idc': [3]})
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.batch_size, args.debug)
 
@@ -71,12 +96,16 @@ def train(args: argparse.Namespace):
         for data_tuple in train_iterator:
             optimizer.zero_grad()
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
-
+            print([i.shape for i in data])
             out = model(*data)
+#            print(f"target: {target.shape}, out: {out.shape}")
+            #for some nets, output will be smaller than target. Crop target centrally to match output:
+            target, out = CenterCropTensor(target, out)
+ #           print(f"new target: {target.shape}, new out: {out.shape}")
             loss = loss_fn(out, target)
             #loss = loss1(out, target)+loss2(out, target)
             dice = DicePerClass(out, target).detach()
-            epoch_train_metrics["Loss"] += loss.detach()
+            epoch_train_metrics["Loss"] += loss.detach().numpy()
             epoch_train_metrics["Dice"] += dice.detach().numpy()
 
             status = {"loss": loss.item(), "Dice":dice.detach().numpy()}
@@ -93,14 +122,15 @@ def train(args: argparse.Namespace):
         NN = len(val_loader)
         val_iterator = tqdm(val_loader, total=NN, leave=False)
 
-        epoch_val_metrics =  {"Loss": 0.0, "Dice": np.array([0.0,0.,0.,0.,0.,0.,0.])}
+        epoch_val_metrics =  {"Loss": 0.0, "Dice": np.array([0.,0.,0.,0.,0.,0.,0.])}
         for data_tuple in val_iterator:
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
 
             out = model(*data)
+            target, out = CenterCropTensor(target, out)
             loss = loss_fn(out, target)
             dice = DicePerClass(out, target)
-            epoch_val_metrics["Loss"] += loss.detach()
+            epoch_val_metrics["Loss"] += loss.detach().numpy()
             epoch_val_metrics["Dice"] += dice.detach().numpy()
 
 
@@ -138,8 +168,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
 
-    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=32', "--network=UNet", "--n_epoch=25",
-                "--losses=[('GeneralizedDice', {'idc':[3]}, 1)]" , "--save_as=First_unet", "--debug"]
+    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=64', "--network=DeepMedic", "--n_epoch=100", "--l_rate=5e-3",
+                "--losses=[('GeneralizedDice', {'idc':[3]}, 1)]" , "--save_as=First_deepmed", "--debug"] #"--restore_from=RESULTS/First_unet"
 
     args = parser.parse_args()
     print(args)
