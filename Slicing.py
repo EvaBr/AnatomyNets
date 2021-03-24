@@ -40,10 +40,10 @@ def check2Dcuts(datafolder, pid, inp2=False):
     plt.show()
    
 #%%
-check2Dcuts("POEM110", "500077_30_0", True)
-check2Dcuts("POEM110", "500077_30_1", True)
-check2Dcuts("POEM110", "500297_30_0", True)
-check2Dcuts("POEM110", "500297_30_1", True)
+#check2Dcuts("POEM110", "500077_30_0", True)
+#check2Dcuts("POEM110", "500077_30_1", True)
+#check2Dcuts("POEM110", "500297_30_0", True)
+#check2Dcuts("POEM110", "500297_30_1", True)
 ####################################
 
 
@@ -156,7 +156,7 @@ add_dts = False
 make_subsampled = True
 patch_size = 110
 
-cutPOEM(patch_size, make_subsampled, add_dts, outpath)
+#cutPOEM(patch_size, make_subsampled, add_dts, outpath)
 #now all cut imges are saved in training. If you want also val data, use POEM_train_val_split:
-train_val_splitPOEM('POEM110', 15)
+#train_val_splitPOEM('POEM110', 15)
 # %%

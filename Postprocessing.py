@@ -18,9 +18,9 @@ def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
     to_plot = ['Loss'] + [Dice_names[i] for i in individ_Dices]
 
     L = len(to_plot)
-    cols, rows = 3, np.ceil(L/3)
+    cols, rows = min(3,L), np.ceil(L/3)
     for tip in [("", "TRAINING"), ("val_", "VALIDATION")]:
-        plt.figure(figsize = (cols*8,rows*5))
+        plt.figure(figsize = (cols*7,rows*5))
         plt.suptitle(tip[1])
         for idx, what in enumerate(to_plot):
             plt.subplot(rows, cols, idx+1)
@@ -31,7 +31,7 @@ def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
         plt.show()
     
 #%%
-compare_curves(['First_unet', 'First_deepmed','First_pspnet'])
+#compare_curves(['First_unet', 'First_deepmed','First_pspnet'])
 # %%
 
 def plotOutput(params, datafolder, pid):
@@ -98,7 +98,9 @@ def plotOutput(params, datafolder, pid):
 
     plt.show()
 
-            
+#plotOutput('Second_deepmed', 'POEM110', '500026_40')
+#plotOutput('Second_unet', 'POEM110', '500026_40')
+#plotOutput('Second_pspnet', 'POEM110', '500026_40')
 
 
 # %%
