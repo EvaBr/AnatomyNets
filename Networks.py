@@ -13,7 +13,7 @@ model_urls = {
     'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
     'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
     'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
-} #only resnet18 and resnet34 work for now.
+}
 
 
 
@@ -96,7 +96,7 @@ class UNet(nn.Module):
         self.up1 = UpBlock(128)
         self.final = nn.Sequential(
             nn.Conv2d(64, n_classes, kernel_size=1),
-            nn.Softmax(dim=1)
+            nn.LogSoftmax(dim=1)
         )
 
     def forward(self, x_in):
@@ -142,7 +142,7 @@ class DeepMedic(nn.Module):
         self.final = nn.Sequential(
             DoubleConv(100, 150, kernel_size=1, padding=0),
             nn.Conv2d(150, n_classes, kernel_size=1),
-            nn.Softmax(dim=1)
+            nn.LogSoftmax(dim=1)
         )
 
     def forward(self, x_upper, x_lower):
@@ -237,7 +237,7 @@ class PSPNet(nn.Module):
         )
         self.final = nn.Sequential( 
             nn.Conv2d(64, n_classes, kernel_size=1),
-            nn.Softmax(dim=1)
+            nn.LogSoftmax(dim=1)
         )
 
     def get_pretrained(self, network, pretrained=True):

@@ -27,11 +27,11 @@ class CrossEntropy():
         self.idc: List[int] = kwargs["idc"]
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
-        log_p: Tensor = (probs[:, self.idc, ...] + 1e-10).log()
+        log_p: Tensor = probs[:, self.idc, ...] #+ 1e-10).log()
         mask: Tensor = target[:, self.idc, ...].type(torch.float32)
 
         loss = - einsum("bcwh,bcwh->", mask, log_p)
-        loss /= mask.sum() + 1e-10
+        loss /= max(mask.sum(), 1e-10) #mask.sum() + 1e-10
         return loss
 
 
@@ -41,7 +41,7 @@ class GeneralizedDice():
         self.idc: List[int] = kwargs["idc"]
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
-        pc = probs[:, self.idc, ...].type(torch.float32)
+        pc = probs[:, self.idc, ...].type(torch.float32).exp()
         tc = target[:, self.idc, ...].type(torch.float32)
 
         w: Tensor = 1 / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
@@ -53,8 +53,9 @@ class GeneralizedDice():
         loss = divided.mean()
         return loss
 
+
 def DicePerClass(probs: Tensor, target: Tensor):
-    pc = probs.type(torch.float32)
+    pc = probs.type(torch.float32).exp()
     tc = target.type(torch.float32)
     
     w: Tensor = 1 / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
