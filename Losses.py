@@ -39,16 +39,29 @@ class GeneralizedDice():
     def __init__(self, **kwargs):
         # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
         self.idc: List[int] = kwargs["idc"]
+        self.epsilon: float = kwargs["epsilon"] if "epsilon" in kwargs else 1.
+        self.strategy: float = kwargs["strategy"] if "strategy" in kwargs else "normalize"
+        assert self.strategy in [None, "volume", "normalize"], "Wrong option when choosing strategy."
+
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
         pc = probs[:, self.idc, ...].type(torch.float32).exp()
         tc = target[:, self.idc, ...].type(torch.float32)
 
-        w: Tensor = 1 / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
+        #w: Tensor = 1 / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
+        w: Tensor = einsum("bcwh->bc", tc).float()
+        if self.strategy=="volume":
+            w = torch.where(w!=0., 
+                1/torch.max(w, torch.ones_like(w)*1e-4)**2,
+                torch.zeros_like(w)
+            )
+        elif self.strategy=="normalize":
+            w = torch.div(w.T, w.sum(1)).T
+
         intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
         union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
 
-        divided: Tensor = 1 - 2 * (einsum("bc->b", intersection) + 1e-10) / (einsum("bc->b", union) + 1e-10)
+        divided: Tensor = 1 - (2 * einsum("bc->b", intersection) + self.epsilon) / (einsum("bc->b", union) + self.epsilon)
 
         loss = divided.mean()
         return loss

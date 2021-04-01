@@ -26,7 +26,7 @@ class DataOut(data.Dataset):
         self.files = listdir(f"{folder}/gt/")  #assume all folders, gt, in1, in2, have same file names
         self.double = double
         if debug:
-            self.files = self.files[:batch_size*5]
+            self.files = self.files[:batch_size*10]
     
     def __len__(self):
         'total number of samples'

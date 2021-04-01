@@ -26,7 +26,7 @@ def CenterCropTensor(tgt, x):
     return tgt, x
 
 def save_run(train_m, val_m, model, optimizer, save_to, epoch):
-    """Saves the final state of network for realoading, and CSV of metrics, and a txt file of args used for the run."""
+    """Saves the final state of network for re-loading, and CSV of metrics, and a txt file of args used for the run."""
 
     if not os.path.exists('RESULTS'):
         os.mkdir('RESULTS')
@@ -71,10 +71,10 @@ def setup(args: argparse.Namespace):
                     state[k] = v.to(device)
     
     model = net.to(device)
-    #loss = MultiTaskLoss(args.losses)
-    #loss = GeneralizedDice(**{'idc': [0,1,2,3,4,5,6]})
+    loss = MultiTaskLoss(args.losses)
+    #loss = GeneralizedDice(**{'idc': [3]})
     #loss = CrossEntropy(**{'idc': [0]})
-    loss = GeneralizedDice(**{'idc': [3]})
+    #loss = GeneralizedDice(**{'idc': [0,1,2,3,4,5,6]})
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
@@ -168,8 +168,9 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
 
-    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=PSPNet", "--n_epoch=100", "--l_rate=5e-3",
-                "--losses=[('GeneralizedDice', {'idc':[2,3,4,5,6]}, 1)]" , "--save_as=Second_pspnet", "--debug"] #"--restore_from=RESULTS/First_unet"
+    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=5", "--l_rate=5e-3",
+                "--losses=[('GeneralizedDice', {'idc': [3], 'strategy': 'volume'}, 1.7), ('GeneralizedDice', {'idc': [1,2,4,5,6], 'strategy': 'volume'}, 1)]" , 
+                "--save_as=Sixth_unet", "--debug"] #"--restore_from=RESULTS/First_unet"
 
     args = parser.parse_args()
     print(args)
