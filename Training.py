@@ -169,8 +169,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--save_as", type=str, required=True)
 
     sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=5", "--l_rate=5e-3",
-                "--losses=[('GeneralizedDice', {'idc': [3], 'strategy': 'volume'}, 1.7), ('GeneralizedDice', {'idc': [1,2,4,5,6], 'strategy': 'volume'}, 1)]" , 
-                "--save_as=Sixth_unet", "--debug"] #"--restore_from=RESULTS/First_unet"
+                "--losses=[('GeneralizedDice', {'idc': [0,1,2,4,5,6], 'strategy': 'normalize'}, 1)]" , 
+                "--save_as=orig110_unet_3", "--debug"] #"--restore_from=RESULTS/First_unet"
 
     args = parser.parse_args()
     print(args)

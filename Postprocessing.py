@@ -31,8 +31,9 @@ def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
         plt.show()
     
 #%%
-#compare_curves(['First_unet', 'First_deepmed','First_pspnet'])
+#compare_curves(['Third_unet', 'Fourth_unet'])
 # %%
+
 
 def plotOutput(params, datafolder, pid):
     """After training a net and saving its state to name PARAMS,
@@ -79,7 +80,7 @@ def plotOutput(params, datafolder, pid):
     
         out = net(*data)
   #      target, out = CenterCropTensor(target, out) #crop to be more comparable?
-
+        
         #now plot :)
         plt.subplot(L,2,ind)
         plt.title('GT')
@@ -98,9 +99,19 @@ def plotOutput(params, datafolder, pid):
 
     plt.show()
 
-#plotOutput('Second_deepmed', 'POEM110', '500026_40')
-#plotOutput('Second_unet', 'POEM110', '500026_40')
-#plotOutput('Second_pspnet', 'POEM110', '500026_40')
+#%%
+plotOutput('First_unet', 'POEM110', '500026_40')
+plotOutput('Second_unet', 'POEM110', '500026_40')
+plotOutput('Third_unet', 'POEM110', '500026_40')
+#plotOutput('Fourth_unet', 'POEM110', '500026_40')
+#plotOutput('Fifth_unet', 'POEM110', '500026_40')
+#plotOutput('Sixth_unet', 'POEM110', '500026_40')
 
+
+# %%
+#plotOutput('orig110_unet', 'POEM110', '500026_40')
+#plotOutput('sampled110_unet', 'POEM_sampled', '500026_40')
+#plotOutput('orig110_unet_2', 'POEM110', '500026_40')
+#plotOutput('sampled110_unet_2', 'POEM_sampled', '500026_40')
 
 # %%
