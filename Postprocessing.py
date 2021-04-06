@@ -103,15 +103,9 @@ def plotOutput(params, datafolder, pid):
 plotOutput('First_unet', 'POEM110', '500026_40')
 plotOutput('Second_unet', 'POEM110', '500026_40')
 plotOutput('Third_unet', 'POEM110', '500026_40')
-#plotOutput('Fourth_unet', 'POEM110', '500026_40')
-#plotOutput('Fifth_unet', 'POEM110', '500026_40')
-#plotOutput('Sixth_unet', 'POEM110', '500026_40')
 
 
 # %%
-#plotOutput('orig110_unet', 'POEM110', '500026_40')
-#plotOutput('sampled110_unet', 'POEM_sampled', '500026_40')
-#plotOutput('orig110_unet_2', 'POEM110', '500026_40')
-#plotOutput('sampled110_unet_2', 'POEM_sampled', '500026_40')
+plotOutput('sampled_unet', 'POEM_sampled', '500026_40')
 
 # %%

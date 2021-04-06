@@ -37,10 +37,9 @@ class CrossEntropy():
 
 class GeneralizedDice():
     def __init__(self, **kwargs):
-        # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
         self.idc: List[int] = kwargs["idc"]
         self.epsilon: float = kwargs["epsilon"] if "epsilon" in kwargs else 1.
-        self.strategy: float = kwargs["strategy"] if "strategy" in kwargs else "normalize"
+        self.strategy: float = kwargs["strategy"] if "strategy" in kwargs else None
         assert self.strategy in [None, "volume", "normalize"], "Wrong option when choosing strategy."
 
 
@@ -48,7 +47,7 @@ class GeneralizedDice():
         pc = probs[:, self.idc, ...].type(torch.float32).exp()
         tc = target[:, self.idc, ...].type(torch.float32)
 
-        #w: Tensor = 1 / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
+        #w: Tensor = 1. / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
         w: Tensor = einsum("bcwh->bc", tc).float()
         if self.strategy=="volume":
             w = torch.where(w!=0., 
@@ -57,6 +56,9 @@ class GeneralizedDice():
             )
         elif self.strategy=="normalize":
             w = torch.div(w.T, w.sum(1)).T
+            
+        elif self.strategy==None:
+            w = 1. / ( w + 1e-10 )**2
 
         intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
         union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))

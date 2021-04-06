@@ -30,7 +30,8 @@ def save_run(train_m, val_m, model, optimizer, save_to, epoch):
 
     if not os.path.exists('RESULTS'):
         os.mkdir('RESULTS')
-    df = pd.DataFrame({**train_m, **val_m})
+    joint_dic = {**train_m, **val_m}
+    df = pd.DataFrame({k: v.cpu().numpy().tolist() for k,v in joint_dic.items()})
     cols = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
     cols_v = [f"val_{c}" for c in cols]
     df = pd.concat([df['Loss'], pd.DataFrame(df['Dice'].values.tolist(), columns=cols), 
@@ -84,15 +85,18 @@ def setup(args: argparse.Namespace):
 def train(args: argparse.Namespace):
     model, optimizer, loss_fn, train_loader, val_loader, device, start_epoch = setup(args)
 
-    train_metrics = {"Loss": [], "Dice": []}
-    val_metrics = {"val_Loss": [], "val_Dice": []}
+    train_metrics = {"Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
+                     "Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32)}
+    val_metrics = {"val_Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
+                   "val_Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32)}
     for epoch in range(start_epoch, args.n_epoch+start_epoch):
         #train
         model.train()
         NN = len(train_loader)
         train_iterator = tqdm(train_loader, total=NN, leave=False)
         
-        epoch_train_metrics = {"Loss": 0.0, "Dice": np.array([0.,0.,0.,0.,0.,0.,0.])}
+        epoch_train_metrics = {"Loss": torch.tensor(0.0, device=device), 
+                            "Dice": torch.zeros((7,), device=device).type(torch.float32)}
         for data_tuple in train_iterator:
             optimizer.zero_grad()
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
@@ -103,26 +107,29 @@ def train(args: argparse.Namespace):
             target, out = CenterCropTensor(target, out)
  #           print(f"new target: {target.shape}, new out: {out.shape}")
             loss = loss_fn(out, target)
-            #loss = loss1(out, target)+loss2(out, target)
-            dice = DicePerClass(out, target).detach()
-            epoch_train_metrics["Loss"] += loss.detach().numpy()
-            epoch_train_metrics["Dice"] += dice.detach().numpy()
 
-            status = {"loss": loss.item(), "Dice":dice.detach().numpy()}
-            train_iterator.set_postfix(status) #description(status)
             loss.backward()
             optimizer.step()
+
+            dice = DicePerClass(out, target).detach()
+            epoch_train_metrics["Loss"] += loss.detach()
+            epoch_train_metrics["Dice"] += dice.detach()
+
+            status = {"loss": loss.item(), "Dice":dice.detach().data}
+            train_iterator.set_postfix(status) #description(status)
         
         #save results:
         for i in train_metrics:
-            train_metrics[i].append(epoch_train_metrics[i]/NN)
-        print(f"EPOCH {epoch}: \n [TRAIN] Loss={train_metrics['Loss'][-1]}, Dice={train_metrics['Dice'][-1]}")
+            train_metrics[i][epoch-start_epoch, ...] = epoch_train_metrics[i]/NN
+        print(f"EPOCH {epoch}: \n [TRAIN] Loss={train_metrics['Loss'][epoch-start_epoch]}, Dice={train_metrics['Dice'][epoch-start_epoch, ...]}")
+        
         #validate
         model.eval()
         NN = len(val_loader)
         val_iterator = tqdm(val_loader, total=NN, leave=False)
 
-        epoch_val_metrics =  {"Loss": 0.0, "Dice": np.array([0.,0.,0.,0.,0.,0.,0.])}
+        epoch_val_metrics = {"Loss": torch.tensor(0.0, device=device), 
+                            "Dice": torch.zeros((7,), device=device).type(torch.float32)}
         for data_tuple in val_iterator:
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
 
@@ -130,18 +137,18 @@ def train(args: argparse.Namespace):
             target, out = CenterCropTensor(target, out)
             loss = loss_fn(out, target)
             dice = DicePerClass(out, target)
-            epoch_val_metrics["Loss"] += loss.detach().numpy()
-            epoch_val_metrics["Dice"] += dice.detach().numpy()
+            epoch_val_metrics["Loss"] += loss.detach()
+            epoch_val_metrics["Dice"] += dice.detach()
 
 
-            status = {"loss": loss.item(), "Dice":dice.detach().numpy()}
+            status = {"loss": loss.item(), "Dice":dice.detach().data}
             val_iterator.set_postfix(status) #description(status)
 
 
         #save results
         for i in train_metrics:
-            val_metrics[f"val_{i}"].append(epoch_val_metrics[i]/NN)
-        print(f" [VAL] Loss={val_metrics['val_Loss'][-1]}, Dice={val_metrics['val_Dice'][-1]}")
+            val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
+        print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...]}")
 
     
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
@@ -168,9 +175,9 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
 
-    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=5", "--l_rate=5e-3",
-                "--losses=[('GeneralizedDice', {'idc': [0,1,2,4,5,6], 'strategy': 'normalize'}, 1)]" , 
-                "--save_as=orig110_unet_3", "--debug"] #"--restore_from=RESULTS/First_unet"
+    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=10", "--l_rate=5e-2",
+                "--losses=[('GeneralizedDice', {'idc': [1,2,4,5,6]}, 1)]" , 
+                "--save_as=unet", "--debug"] #"--restore_from=RESULTS/First_unet"
 
     args = parser.parse_args()
     print(args)
