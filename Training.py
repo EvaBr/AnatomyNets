@@ -48,7 +48,7 @@ def save_run(train_m, val_m, model, optimizer, save_to, epoch):
 
 
 def setup(args: argparse.Namespace):
-    device = torch.device("cpu") if not torch.cuda.is_available() else torch.device("cuda")
+    device = torch.device("cpu") if (not torch.cuda.is_available() or args.cpu) else torch.device("cuda")
 
     net = getattr(Networks, args.network)(args.in_channels, args.n_class, args.lower_in_channels, args.extractor_net)
     net = net.float()
@@ -76,7 +76,7 @@ def setup(args: argparse.Namespace):
     #loss = GeneralizedDice(**{'idc': [3]})
     #loss = CrossEntropy(**{'idc': [0]})
     #loss = GeneralizedDice(**{'idc': [0,1,2,3,4,5,6]})
-    train_loader, val_loader = get_loaders(args.network, args.dataset, args.batch_size, args.debug)
+    train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
 
@@ -104,6 +104,7 @@ def train(args: argparse.Namespace):
             out = model(*data)
 #            print(f"target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
+            print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             target, out = CenterCropTensor(target, out)
  #           print(f"new target: {target.shape}, new out: {out.shape}")
             loss = loss_fn(out, target)
@@ -174,10 +175,11 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
+    parser.add_argument("--cpu", action="store_true")
 
-    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=100", "--l_rate=5e-2",
+    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=32', "--network=UNet", "--n_epoch=100", "--l_rate=5e-2",
                 "--losses=[('GeneralizedDice', {'idc': [1,2,4,5,6], 'epsilon': 1e-10}, 1)]" , 
-                "--save_as=unet_100samples", "--debug"] #"--restore_from=RESULTS/First_unet"
+                "--save_as=unet", "--debug"]
 
     args = parser.parse_args()
     print(args)
