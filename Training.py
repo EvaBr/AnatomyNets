@@ -11,6 +11,7 @@ import sys
 import numpy as np
 import os
 np.set_printoptions(precision=3, suppress=True)
+torch.set_printoptions(precision=3, sci_mode=False)
 
 def CenterCropTensor(tgt, x):
     xs2, xs3 = x.shape[2], x.shape[3]
@@ -93,7 +94,7 @@ def train(args: argparse.Namespace):
         #train
         model.train()
         NN = len(train_loader)
-        train_iterator = tqdm(train_loader, total=NN, leave=False)
+        train_iterator = tqdm(train_loader, ncols=150, total=NN, leave=False)
         
         epoch_train_metrics = {"Loss": torch.tensor(0.0, device=device), 
                             "Dice": torch.zeros((7,), device=device).type(torch.float32)}
@@ -104,7 +105,7 @@ def train(args: argparse.Namespace):
             out = model(*data)
 #            print(f"target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
-            print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
+ #           print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             target, out = CenterCropTensor(target, out)
  #           print(f"new target: {target.shape}, new out: {out.shape}")
             loss = loss_fn(out, target)
@@ -116,18 +117,18 @@ def train(args: argparse.Namespace):
             epoch_train_metrics["Loss"] += loss.detach()
             epoch_train_metrics["Dice"] += dice.detach()
 
-            status = {"loss": loss.item(), "Dice":dice.detach().data}
+            status = {"loss": loss.item(), "Dice": dice.detach().cpu().numpy()} #is there a way to print nicely without copying to cpu?
             train_iterator.set_postfix(status) #description(status)
         
         #save results:
         for i in train_metrics:
             train_metrics[i][epoch-start_epoch, ...] = epoch_train_metrics[i]/NN
-        print(f"EPOCH {epoch}: \n [TRAIN] Loss={train_metrics['Loss'][epoch-start_epoch]}, Dice={train_metrics['Dice'][epoch-start_epoch, ...]}")
+        print(f"EPOCH {epoch}: \n [TRAIN] Loss={train_metrics['Loss'][epoch-start_epoch]}, Dice={train_metrics['Dice'][epoch-start_epoch, ...].cpu().numpy()}")
         
         #validate
         model.eval()
         NN = len(val_loader)
-        val_iterator = tqdm(val_loader, total=NN, leave=False)
+        val_iterator = tqdm(val_loader, ncols=150, total=NN, leave=False)
 
         epoch_val_metrics = {"Loss": torch.tensor(0.0, device=device), 
                             "Dice": torch.zeros((7,), device=device).type(torch.float32)}
@@ -142,14 +143,14 @@ def train(args: argparse.Namespace):
             epoch_val_metrics["Dice"] += dice.detach()
 
 
-            status = {"loss": loss.item(), "Dice":dice.detach().data}
+            status = {"loss": loss.item(), "Dice":dice.detach().cpu().numpy()}
             val_iterator.set_postfix(status) #description(status)
 
 
         #save results
         for i in train_metrics:
             val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
-        print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...]}")
+        print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
 
     
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
