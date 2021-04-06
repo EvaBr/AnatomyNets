@@ -100,12 +100,12 @@ def plotOutput(params, datafolder, pid):
     plt.show()
 
 #%%
-plotOutput('First_unet', 'POEM110', '500026_40')
-plotOutput('Second_unet', 'POEM110', '500026_40')
-plotOutput('Third_unet', 'POEM110', '500026_40')
+#plotOutput('First_unet', 'POEM110', '500026_40')
+#plotOutput('Second_unet', 'POEM110', '500026_40')
+#plotOutput('Third_unet', 'POEM110', '500026_40')
 
 
 # %%
-plotOutput('sampled_unet', 'POEM_sampled', '500026_40')
+#plotOutput('sampled_unet', 'POEM_sampled', '500026_40')
 
 # %%

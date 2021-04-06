@@ -175,9 +175,9 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
 
-    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=10", "--l_rate=5e-2",
-                "--losses=[('GeneralizedDice', {'idc': [1,2,4,5,6]}, 1)]" , 
-                "--save_as=unet", "--debug"] #"--restore_from=RESULTS/First_unet"
+    sys.argv = ['Training.py', '--dataset=POEM110', '--batch_size=32', "--network=UNet", "--n_epoch=100", "--l_rate=5e-2",
+                "--losses=[('GeneralizedDice', {'idc': [1,2,4,5,6], 'epsilon': 1e-10}, 1)]" , 
+                "--save_as=unet_100samples", "--debug"] #"--restore_from=RESULTS/First_unet"
 
     args = parser.parse_args()
     print(args)

@@ -56,7 +56,7 @@ class GeneralizedDice():
             )
         elif self.strategy=="normalize":
             w = torch.div(w.T, w.sum(1)).T
-            
+
         elif self.strategy==None:
             w = 1. / ( w + 1e-10 )**2
 
