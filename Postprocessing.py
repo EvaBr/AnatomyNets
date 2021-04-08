@@ -7,6 +7,9 @@ import torch
 import glob
 from Slicing import flatten_one_hot
 import matplotlib.patches as mpatches
+import matplotlib
+matplotlib.use('Agg')
+
 
 
 def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
@@ -60,39 +63,49 @@ def plotOutput(params, datafolder, pid):
        
     #load data&GT
     use_in2 = Arg['network']=='DeepMedic'
-    findgts = glob.glob(f"./{datafolder}/*/gt/subj{pid}_*.npy")
-    findin1 = glob.glob(f"./{datafolder}/*/in1/subj{pid}_*.npy")
-    findin2 = glob.glob(f"./{datafolder}/*/in2/subj{pid}_*.npy")
+    findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}_*.npy")
+    findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}_*.npy")
+    findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}_*.npy")
     findgts.sort(), findin1.sort(), findin2.sort()
     #all subslices in one image.
     ind = 1
     L = len(findgts)
+    if  L>20: #ugly but needed to avoid too long compute
+        findgts = findgts[:20]
+        findin1 = findin1[:20]
+        findin2 = findin2[:20]
+        L=20
     fig = plt.figure(figsize=(10, L*6))
-    axes = []
     organs = ['Bckg', 'Bladder', 'KidneyL', 'Liver', 'Pancreas', 'Spleen', 'KidneyR']
+    if len(organs)!=Arg['n_class']: #in case not POEM dataset used
+        organs = [str(zblj) for zblj in range(Arg['n_class'])]
+
     for g,i1,i2 in zip(findgts, findin1, findin2):
         in1 = np.load(i1)
         data = [torch.from_numpy(in1[np.newaxis,:]).float()]
         in2 = np.load(i2)
-        target = flatten_one_hot(np.load(g))
+        target = np.load(g) 
+        if target.ndim>2: #hardcoded fix to check if gt is one-hot
+            target = flatten_one_hot(target)
         if use_in2:
             data.append(torch.from_numpy(in2[np.newaxis,:]).float())
     
         out = net(*data)
+        out = flatten_one_hot(np.squeeze(out.detach().numpy())) 
   #      target, out = CenterCropTensor(target, out) #crop to be more comparable?
         
         #now plot :)
         plt.subplot(L,2,ind)
         plt.title('GT')
         plt.axis('off')
-        plt.imshow(target, cmap='Spectral', vmin=0, vmax=7)
+        plt.imshow(target, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
         plt.subplot(L,2,ind+1)
         plt.title('OUT')
         plt.axis('off')
-        im = plt.imshow(flatten_one_hot(np.squeeze(out.detach().numpy())), cmap='Spectral', vmin=0, vmax=7)
+        im = plt.imshow(out, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
         ind = ind+2
         
-        values = np.arange(7)
+        values = np.arange(Arg['n_class'])
         colors = [ im.cmap(im.norm(value)) for value in values]
         # create a patch (proxy artist) for every color 
         patches = [ mpatches.Patch(color=colors[i], label=organs[i]) for i in range(len(values)) ]
@@ -100,6 +113,7 @@ def plotOutput(params, datafolder, pid):
         plt.legend(handles=patches, bbox_to_anchor=(1.05, 1.), loc=2, borderaxespad=0. )
 
     plt.show()
+    #plt.savefig('foo.png')
 
 #%%
 #plotOutput('First_unet', 'POEM110', '500026_40')
@@ -108,6 +122,7 @@ def plotOutput(params, datafolder, pid):
 
 
 # %%
-#plotOutput('sampled_unet', 'POEM_sampled', '500026_40')
+plotOutput('unet', 'POEM', '500026_0')
+plotOutput('unet2', 'POEM', '500026_0')
 
 # %%

@@ -196,3 +196,19 @@ sampling = [5, 8, 10, 6, 15, 15, 10]
 #train_val_splitPOEM('POEM_sampled', 15)
 
 # %%
+#perhaps training using only slices with at least one other class than background would be better?
+#let's remove all 0 slices for now
+
+def remove_bckg_slices(datafolder):
+    all_paths = [p for p in pathlib.Path(datafolder).glob("*gt/*.npy")] #we need ground truth to know
+    for p in tqdm(all_paths):
+        pid = re.findall(r"500[0-9]+_[0-9]+_[0-9]+", p.name)[0]
+        fil = np.load(p)
+        classes = fil.sum(axis=tuple([i for i in range(1, fil.ndim)]))
+        if classes[1:].sum() == 0: #no other class but 0 present, delete gt and in1 and in2. 
+            p.unlink()
+            for f in pathlib.Path(datafolder).glob(f"in*/*{pid}.npy"):
+                f.unlink()
+
+
+# %%

@@ -23,7 +23,6 @@ class MultiTaskLoss():
 
 class CrossEntropy():
     def __init__(self, **kwargs):
-        # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
         self.idc: List[int] = kwargs["idc"]
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
@@ -58,7 +57,7 @@ class GeneralizedDice():
             w = torch.div(w.T, w.sum(1)).T
 
         elif self.strategy==None:
-            w = 1. / ( w + 1e-10 )**2
+            w = 1. / (( w + 1e-10 )**2)
 
         intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
         union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
