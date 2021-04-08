@@ -26,10 +26,10 @@ class DoubleConv(nn.Module):
             mid_channels = out_channels
 
         self.block = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation), #change padding?
+            nn.Conv2d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
             nn.BatchNorm2d(out_channels),
             nn.PReLU(), #(P)relu?
-            nn.Conv2d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
             nn.BatchNorm2d(out_channels),
         )
         self.act = nn.PReLU()
@@ -45,10 +45,10 @@ class DownBlock(nn.Module):
         super(DownBlock, self).__init__()
         
         self.block = DoubleConv(in_channels, out_channels)
-        self.downblock =  nn.Sequential(
-            nn.MaxPool2d(2),
-            nn.Dropout(0.5) #dropout to less, or make optional?
-        )
+        self.downblock =  nn.MaxPool2d(2) #nn.Sequential(
+         #   nn.MaxPool2d(2),
+         #   nn.Dropout(0.5) #dropout to less, or make optional?
+        #)
 
     def forward(self, x):
         x = self.downblock(x)
@@ -58,7 +58,12 @@ class UpBlock(nn.Module):
     def __init__(self, in_channels):
         super(UpBlock, self).__init__()
         out_chan = in_channels//2
-        self.upsamp = nn.ConvTranspose2d(in_channels, out_chan, kernel_size=2, stride=2)
+       # self.upsamp = nn.ConvTranspose2d(in_channels, out_chan, kernel_size=2, stride=2) #gives checkerboard artefacts
+        self.upsamp = nn.Sequential(
+            nn.Upsample(scale_factor=2),
+            DoubleConv(in_channels, out_chan)
+  #          nn.Conv2d(in_channels, out_chan, kernel_size=3, padding=1) #size issues when using 2x2 as in paper
+        )
         self.block = DoubleConv(in_channels, out_chan)
 
 
@@ -89,8 +94,8 @@ class UNet(nn.Module):
         self.down1 = DownBlock(64, 128)
         self.down2 = DownBlock(128, 256)
         self.down3 = DownBlock(256, 512)
-        self.down4 = DownBlock(512, 1024)
-        self.up4 = UpBlock(1024)
+      #  self.down4 = DownBlock(512, 1024)
+      #  self.up4 = UpBlock(1024)
         self.up3 = UpBlock(512)
         self.up2 = UpBlock(256)
         self.up1 = UpBlock(128)
@@ -104,12 +109,91 @@ class UNet(nn.Module):
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
-        x5 = self.down4(x4)
-        x = self.up4(x5, x4)
-        x = self.up3(x, x3)
+      #  x5 = self.down4(x4)
+      #  x = self.up4(x5, x4)
+        x = self.up3(x4, x3) #x instead of x4
         x = self.up2(x, x2)
         x = self.up1(x, x1)
         return self.final(x)
+
+#HOEL'S UNET
+def convBatch(nin, nout, kernel_size=3, stride=1, padding=1, bias=False, layer=nn.Conv2d, dilation=1):
+    return nn.Sequential(
+        layer(nin, nout, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias, dilation=dilation),
+        nn.BatchNorm2d(nout),
+        nn.PReLU()
+    )
+
+def upSampleConv(nin, nout, kernel_size=3, upscale=2, padding=1, bias=False):
+    return nn.Sequential(
+        nn.Upsample(scale_factor=upscale),
+        convBatch(nin, nout, kernel_size=kernel_size, stride=1, padding=padding, bias=bias),
+        convBatch(nout, nout, kernel_size=3, stride=1, padding=1, bias=bias),
+    )
+
+class residualConv(nn.Module):
+    def __init__(self, nin, nout):
+        super(residualConv, self).__init__()
+        self.convs = nn.Sequential(
+            convBatch(nin, nout),
+            nn.Conv2d(nout, nout, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(nout)
+        )
+        self.res = nn.Sequential()
+        if nin != nout:
+            self.res = nn.Sequential(
+                nn.Conv2d(nin, nout, kernel_size=1, bias=False),
+                nn.BatchNorm2d(nout)
+            )
+
+    def forward(self, input):
+        out = self.convs(input)
+        return F.leaky_relu(out + self.res(input), 0.2)
+
+
+class UNet2(nn.Module):
+    def __init__(self, nin, nout, dummy=None, dummy2=None, nG=64):
+        super().__init__()
+
+        self.conv0 = nn.Sequential(convBatch(nin, nG),
+                                   convBatch(nG, nG))
+        self.conv1 = nn.Sequential(convBatch(nG * 1, nG * 2, stride=2),
+                                   convBatch(nG * 2, nG * 2))
+        self.conv2 = nn.Sequential(convBatch(nG * 2, nG * 4, stride=2),
+                                   convBatch(nG * 4, nG * 4))
+
+        self.bridge = nn.Sequential(convBatch(nG * 4, nG * 8, stride=2),
+                                    residualConv(nG * 8, nG * 8),
+                                    convBatch(nG * 8, nG * 8))
+
+        self.deconv1 = upSampleConv(nG * 8, nG * 8)
+        self.conv5 = nn.Sequential(convBatch(nG * 12, nG * 4),
+                                   convBatch(nG * 4, nG * 4))
+        self.deconv2 = upSampleConv(nG * 4, nG * 4)
+        self.conv6 = nn.Sequential(convBatch(nG * 6, nG * 2),
+                                   convBatch(nG * 2, nG * 2))
+        self.deconv3 = upSampleConv(nG * 2, nG * 2)
+        self.conv7 = nn.Sequential(convBatch(nG * 3, nG * 1),
+                                   convBatch(nG * 1, nG * 1))
+        self.final = nn.Conv2d(nG, nout, kernel_size=1)
+
+    def forward(self, input):
+        input = input.float()
+        x0 = self.conv0(input)
+        x1 = self.conv1(x0)
+        x2 = self.conv2(x1)
+
+        bridge = self.bridge(x2)
+
+        y0 = self.deconv1(bridge)
+        y1 = self.deconv2(self.conv5(torch.cat((y0, x2), dim=1)))
+        y2 = self.deconv3(self.conv6(torch.cat((y1, x1), dim=1)))
+        y3 = self.conv7(torch.cat((y2, x0), dim=1))
+
+        return self.final(y3)
+
+
+
 
 
 #2D DeepMedic

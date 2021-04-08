@@ -57,7 +57,7 @@ def setup(args: argparse.Namespace):
     net.apply(to_init)
 
     start_epoch = 0
-    optimizer =  optim.Adam(net.parameters(), lr=args.l_rate)
+    optimizer =  optim.Adam(net.parameters(), lr=args.l_rate, betas=(0.9, 0.99), amsgrad=False)
     if args.restore_from!="":
         #restore pretrained and saved network:
         loaded = torch.load(args.restore_from)
@@ -74,9 +74,6 @@ def setup(args: argparse.Namespace):
     
     model = net.to(device)
     loss = MultiTaskLoss(args.losses)
-    #loss = GeneralizedDice(**{'idc': [3]})
-    #loss = CrossEntropy(**{'idc': [0]})
-    #loss = GeneralizedDice(**{'idc': [0,1,2,3,4,5,6]})
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
@@ -94,7 +91,7 @@ def train(args: argparse.Namespace):
         #train
         model.train()
         NN = len(train_loader)
-        train_iterator = tqdm(train_loader, ncols=150, total=NN, leave=False)
+        train_iterator = tqdm(train_loader, ncols=120, total=NN, leave=False)
         
         epoch_train_metrics = {"Loss": torch.tensor(0.0, device=device), 
                             "Dice": torch.zeros((7,), device=device).type(torch.float32)}
@@ -103,18 +100,16 @@ def train(args: argparse.Namespace):
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
  #           print([i.shape for i in data])
             out = model(*data)
-#            print(f"target: {target.shape}, out: {out.shape}")
+#            print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
- #           print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             target, out = CenterCropTensor(target, out)
- #           print(f"new target: {target.shape}, new out: {out.shape}")
             loss = loss_fn(out, target)
 
             loss.backward()
             optimizer.step()
 
-            dice = DicePerClass(out, target).detach()
-            epoch_train_metrics["Loss"] += loss.detach()
+            dice = DicePerClass(out.detach(), target.detach())
+            epoch_train_metrics["Loss"] += loss.item()
             epoch_train_metrics["Dice"] += dice.detach()
 
             status = {"loss": loss.item(), "Dice": dice.detach().cpu().numpy()} #is there a way to print nicely without copying to cpu?
@@ -128,31 +123,33 @@ def train(args: argparse.Namespace):
         #validate
         model.eval()
         NN = len(val_loader)
-        val_iterator = tqdm(val_loader, ncols=150, total=NN, leave=False)
+        val_iterator = tqdm(val_loader, ncols=120, total=NN, leave=False)
+        
+        with torch.no_grad():
+            epoch_val_metrics = {"Loss": torch.tensor(0.0, device=device), 
+                                "Dice": torch.zeros((7,), device=device).type(torch.float32)}
+            for data_tuple in val_iterator:
+                data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
 
-        epoch_val_metrics = {"Loss": torch.tensor(0.0, device=device), 
-                            "Dice": torch.zeros((7,), device=device).type(torch.float32)}
-        for data_tuple in val_iterator:
-            data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
-
-            out = model(*data)
-            target, out = CenterCropTensor(target, out)
-            loss = loss_fn(out, target)
-            dice = DicePerClass(out, target)
-            epoch_val_metrics["Loss"] += loss.detach()
-            epoch_val_metrics["Dice"] += dice.detach()
-
-
-            status = {"loss": loss.item(), "Dice":dice.detach().cpu().numpy()}
-            val_iterator.set_postfix(status) #description(status)
+                out = model(*data)
+                target, out = CenterCropTensor(target, out)
+                loss = loss_fn(out, target)
+                dice = DicePerClass(out.detach(), target.detach())
+                epoch_val_metrics["Loss"] += loss.item()
+                epoch_val_metrics["Dice"] += dice.detach()
 
 
-        #save results
-        for i in train_metrics:
-            val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
-        print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
+                status = {"loss": loss.item(), "Dice":dice.detach().cpu().numpy()}
+                val_iterator.set_postfix(status) #description(status)
 
-    
+
+            #save results
+            for i in train_metrics:
+                val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
+            print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
+
+        #Let's empty cache after each epoch just in case... 
+        torch.cuda.empty_cache()
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
 
 
@@ -178,9 +175,9 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--save_as", type=str, required=True)
     parser.add_argument("--cpu", action="store_true")
 
-    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=32', "--network=UNet", "--n_epoch=100", "--l_rate=5e-2",
-                "--losses=[('GeneralizedDice', {'idc': [1,2,4,5,6], 'epsilon': 1e-10}, 1)]" , 
-                "--save_as=unet", "--debug"]
+    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=8', "--network=UNet2", "--n_epoch=15", "--l_rate=1e-3",
+                "--losses=[('GeneralizedDice', {'idc': [1, 4, 5]}, 0.7), ('GeneralizedDice', {'idc': [2, 6]}, 0.65), \
+            	('GeneralizedDice', {'idc': [3]}, 0.35)]", "--save_as=unet2", "--debug", "--cpu"]
 
     args = parser.parse_args()
     print(args)
