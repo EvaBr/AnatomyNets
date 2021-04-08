@@ -84,9 +84,11 @@ def plotOutput(params, datafolder, pid):
         #now plot :)
         plt.subplot(L,2,ind)
         plt.title('GT')
+        plt.axis('off')
         plt.imshow(target, cmap='Spectral', vmin=0, vmax=7)
         plt.subplot(L,2,ind+1)
         plt.title('OUT')
+        plt.axis('off')
         im = plt.imshow(flatten_one_hot(np.squeeze(out.detach().numpy())), cmap='Spectral', vmin=0, vmax=7)
         ind = ind+2
         
