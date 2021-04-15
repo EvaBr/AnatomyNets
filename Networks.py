@@ -175,17 +175,19 @@ class UNet2(nn.Module):
         self.deconv3 = upSampleConv(nG * 2, nG * 2)
         self.conv7 = nn.Sequential(convBatch(nG * 3, nG * 1),
                                    convBatch(nG * 1, nG * 1))
-        self.final = nn.Conv2d(nG, nout, kernel_size=1)
+        self.final = nn.Sequential(nn.Conv2d(nG, nout, kernel_size=1),
+                                   nn.LogSoftmax(dim=1))
 
     def forward(self, input):
         input = input.float()
         x0 = self.conv0(input)
         x1 = self.conv1(x0)
         x2 = self.conv2(x1)
-
+      
         bridge = self.bridge(x2)
 
         y0 = self.deconv1(bridge)
+
         y1 = self.deconv2(self.conv5(torch.cat((y0, x2), dim=1)))
         y2 = self.deconv3(self.conv6(torch.cat((y1, x1), dim=1)))
         y3 = self.conv7(torch.cat((y2, x0), dim=1))

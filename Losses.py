@@ -72,12 +72,12 @@ def DicePerClass(probs: Tensor, target: Tensor):
     pc = probs.type(torch.float32).exp()
     tc = target.type(torch.float32)
     
-    w: Tensor = 1 / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
+    w: Tensor = 1. / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
     intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
     union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
 
-    divided: Tensor = torch.clamp(2 * (intersection + 1e-10) / (union + 1e-10), max=1.) 
-    #occasionally, if class neither in GT nor OUT in the whole batch, the output might be 2 -.- => clamping needed. (IS IT ENOUGH?)
+    divided: Tensor = (2 * intersection + 1e-10) / (union + 1e-10)
+    #if class present neither in GT nor OUT in the whole batch, the output==1
 
     loss = divided.mean(dim=0) #average over batch. Output size should be C=nb_classes
     return loss

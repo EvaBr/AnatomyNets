@@ -8,7 +8,8 @@ import glob
 from Slicing import flatten_one_hot
 import matplotlib.patches as mpatches
 import matplotlib
-matplotlib.use('Agg')
+import random
+#matplotlib.use('Agg')
 
 
 
@@ -63,35 +64,40 @@ def plotOutput(params, datafolder, pid):
        
     #load data&GT
     use_in2 = Arg['network']=='DeepMedic'
-    findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}_*.npy")
-    findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}_*.npy")
-    findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}_*.npy")
+    findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}*.npy")
+    findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
+    findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
     findgts.sort(), findin1.sort(), findin2.sort()
     #all subslices in one image.
     ind = 1
     L = len(findgts)
     if  L>20: #ugly but needed to avoid too long compute
-        findgts = findgts[:20]
-        findin1 = findin1[:20]
-        findin2 = findin2[:20]
+        take20 = random.sample(range(L), 20)
+        findgts = [findgts[tk] for tk in take20]
+        findin1 = [findin1[tk] for tk in take20]
+        if use_in2:
+            findin2 = [findin2[tk] for tk in take20]
         L=20
     fig = plt.figure(figsize=(10, L*6))
     organs = ['Bckg', 'Bladder', 'KidneyL', 'Liver', 'Pancreas', 'Spleen', 'KidneyR']
     if len(organs)!=Arg['n_class']: #in case not POEM dataset used
         organs = [str(zblj) for zblj in range(Arg['n_class'])]
 
-    for g,i1,i2 in zip(findgts, findin1, findin2):
+    for idx,g,i1 in zip(range(L), findgts, findin1):
         in1 = np.load(i1)
-        data = [torch.from_numpy(in1[np.newaxis,:]).float()]
-        in2 = np.load(i2)
+        tmp_in1 = torch.from_numpy(in1[np.newaxis,:]).float()
+        #data = [torch.stack([tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1], dim=0).squeeze()]
+        data = [tmp_in1]
         target = np.load(g) 
         if target.ndim>2: #hardcoded fix to check if gt is one-hot
             target = flatten_one_hot(target)
         if use_in2:
+            in2 = np.load(findin2[idx])
             data.append(torch.from_numpy(in2[np.newaxis,:]).float())
     
         out = net(*data)
-        out = flatten_one_hot(np.squeeze(out.detach().numpy())) 
+        #out = flatten_one_hot(out[0,...].detach().squeeze().numpy()) 
+        out = flatten_one_hot(out.detach().squeeze().numpy()) 
   #      target, out = CenterCropTensor(target, out) #crop to be more comparable?
         
         #now plot :)
@@ -116,13 +122,6 @@ def plotOutput(params, datafolder, pid):
     #plt.savefig('foo.png')
 
 #%%
-#plotOutput('First_unet', 'POEM110', '500026_40')
-#plotOutput('Second_unet', 'POEM110', '500026_40')
-#plotOutput('Third_unet', 'POEM110', '500026_40')
-
-
-# %%
-plotOutput('unet', 'POEM', '500026_0')
-plotOutput('unet2', 'POEM', '500026_0')
+#plotOutput('unet', 'POEM', '500026_0')
 
 # %%

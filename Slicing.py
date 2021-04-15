@@ -7,7 +7,7 @@ import random
 import re
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import random
+
 
 #%%
 ####################################
@@ -119,9 +119,9 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
 
             for counter,index in enumerate(indexes):
                 startx = index[0]+16
-                endx = index[0]+16+2*patch+1
+                endx = index[0]+16+2*patch
                 starty = index[1]+16
-                endy = index[1]+16+2*patch+1
+                endy = index[1]+16+2*patch
 
                 allin = [wat_tmp[startx:endx, starty:endy], 
                         fat_tmp[startx:endx, starty:endy]]
@@ -176,24 +176,24 @@ def train_val_splitPOEM(datafolder, val_subjects = 15):
 
 
 # %%
-outpath = "POEM110"
-add_dts = False
-make_subsampled = True
-patch_size = 110
+#outpath = "POEM110"
+#add_dts = False
+#make_subsampled = True
+#patch_size = 110
 
 #cutPOEM(patch_size, make_subsampled, add_dts, outpath)
 #now all cut imges are saved in training. If you want also val data, use POEM_train_val_split:
 #train_val_splitPOEM('POEM110', 15)
 # %%
-outpath = "POEM_sampled"
-add_dts = False
-make_subsampled = True
-patch_size = 110
-sampling = [5, 8, 10, 6, 15, 15, 10]
+#outpath = "POEM_sampled"
+#add_dts = False
+#make_subsampled = True
+#patch_size = 110
+#sampling = [5, 8, 10, 6, 15, 15, 10]
 
 #cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling)
-# %%
 #train_val_splitPOEM('POEM_sampled', 15)
+
 
 # %%
 #perhaps training using only slices with at least one other class than background would be better?
@@ -211,4 +211,14 @@ def remove_bckg_slices(datafolder):
                 f.unlink()
 
 
+# %%
+#outpath = "POEM80"
+#add_dts = False
+#make_subsampled = False
+#patch_size = 80
+
+#cutPOEM(patch_size, make_subsampled, add_dts, outpath)
+#train_val_splitPOEM('POEM80', 15)
+
+#remove_bckg_slices('POEM80/TRAIN')
 # %%

@@ -10,6 +10,10 @@ import pandas as pd
 import sys
 import numpy as np
 import os
+
+from Slicing import flatten_one_hot
+import matplotlib.pyplot as plt 
+
 np.set_printoptions(precision=3, suppress=True)
 torch.set_printoptions(precision=3, sci_mode=False)
 
@@ -73,7 +77,8 @@ def setup(args: argparse.Namespace):
                     state[k] = v.to(device)
     
     model = net.to(device)
-    loss = MultiTaskLoss(args.losses)
+ #   loss = MultiTaskLoss(args.losses)
+    loss = CrossEntropy(idc = [0,3,4])
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
@@ -81,6 +86,7 @@ def setup(args: argparse.Namespace):
 
 
 def train(args: argparse.Namespace):
+    torch.autograd.set_detect_anomaly(True)
     model, optimizer, loss_fn, train_loader, val_loader, device, start_epoch = setup(args)
 
     train_metrics = {"Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
@@ -98,9 +104,9 @@ def train(args: argparse.Namespace):
         for data_tuple in train_iterator:
             optimizer.zero_grad()
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
- #           print([i.shape for i in data])
+         #   print([i.shape for i in data])
             out = model(*data)
-#            print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
+         #   print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
             target, out = CenterCropTensor(target, out)
             loss = loss_fn(out, target)
@@ -114,6 +120,15 @@ def train(args: argparse.Namespace):
 
             status = {"loss": loss.item(), "Dice": dice.detach().cpu().numpy()} #is there a way to print nicely without copying to cpu?
             train_iterator.set_postfix(status) #description(status)
+
+       # if args.debug and epoch%5==0:
+       #     plt.figure()
+       #     plt.subplot(1,2,1)
+       #     plt.imshow(flatten_one_hot(target[0,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
+       #     plt.subplot(1,2,2)
+       #     plt.imshow(flatten_one_hot(out[0,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
+       #     plt.show()
+
         
         #save results:
         for i in train_metrics:
@@ -148,8 +163,8 @@ def train(args: argparse.Namespace):
                 val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
             print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
 
-        #Let's empty cache after each epoch just in case... 
-        torch.cuda.empty_cache()
+        #Let's empty cache after each epoch just in case that helps memory issues... 
+        #torch.cuda.empty_cache()
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
 
 
@@ -175,9 +190,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--save_as", type=str, required=True)
     parser.add_argument("--cpu", action="store_true")
 
-    sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=8', "--network=UNet2", "--n_epoch=15", "--l_rate=1e-3",
-                "--losses=[('GeneralizedDice', {'idc': [1, 4, 5]}, 0.7), ('GeneralizedDice', {'idc': [2, 6]}, 0.65), \
-            	('GeneralizedDice', {'idc': [3]}, 0.35)]", "--save_as=unet2", "--debug", "--cpu"]
+    sys.argv = ['Training.py', '--dataset=POEM80', '--batch_size=8', '--network=UNet', '--n_epoch=21', '--l_rate=1e-3',
+                "--losses=[('CrossEntropy', {'idc': [4]}, 1)]", "--save_as=unet_one_subj_ce", '--debug']
 
     args = parser.parse_args()
     print(args)
