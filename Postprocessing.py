@@ -39,7 +39,7 @@ def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
 # %%
 
 
-def plotOutput(params, datafolder, pid):
+def plotOutput(params, datafolder, pids, doeval=True):
     """After training a net and saving its state to name PARAMS,
          run inference on subject PID from DATAFOLDER, and plot results+GT. 
          PID should be subject_slice, and all subject_slice_x will be run.
@@ -60,56 +60,69 @@ def plotOutput(params, datafolder, pid):
     #now we can load learned params:
     loaded = torch.load(f"RESULTS/{params}")
     net.load_state_dict(loaded['state_dict'])
-    net.eval()
+    
+    if doeval:
+        net.eval()
        
     #load data&GT
+    if isinstance(pids, str):
+        pids = [pids]
+
     use_in2 = Arg['network']=='DeepMedic'
-    findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}*.npy")
-    findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
-    findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
-    findgts.sort(), findin1.sort(), findin2.sort()
-    #all subslices in one image.
-    ind = 1
-    L = len(findgts)
-    if  L>20: #ugly but needed to avoid too long compute
-        take20 = random.sample(range(L), 20)
-        findgts = [findgts[tk] for tk in take20]
-        findin1 = [findin1[tk] for tk in take20]
-        if use_in2:
-            findin2 = [findin2[tk] for tk in take20]
-        L=20
-    fig = plt.figure(figsize=(10, L*6))
+    allL = 0
+    allfindgts = []
+    allfindin1 = []
+    allfindin2 = []
+    for pid in pids:
+        findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}*.npy")
+        findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
+        findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
+        findgts.sort(), findin1.sort(), findin2.sort()
+        #all subslices in one image.
+        ind = 1
+        L = len(findgts)
+        if  L>20: #ugly but needed to avoid too long compute
+            take20 = random.sample(range(L), 20)
+            findgts = [findgts[tk] for tk in take20]
+            findin1 = [findin1[tk] for tk in take20]
+            if use_in2:
+                findin2 = [findin2[tk] for tk in take20]
+            L=20
+        
+        allL += L 
+        allfindgts.extend(findgts)
+        allfindin1.extend(findin1)
+        allfindin2.extend(findin2)
+
+    
     organs = ['Bckg', 'Bladder', 'KidneyL', 'Liver', 'Pancreas', 'Spleen', 'KidneyR']
     if len(organs)!=Arg['n_class']: #in case not POEM dataset used
         organs = [str(zblj) for zblj in range(Arg['n_class'])]
 
-    for idx,g,i1 in zip(range(L), findgts, findin1):
-        in1 = np.load(i1)
-        tmp_in1 = torch.from_numpy(in1[np.newaxis,:]).float()
-        #data = [torch.stack([tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1, tmp_in1], dim=0).squeeze()]
-        data = [tmp_in1]
-        target = np.load(g) 
-        if target.ndim>2: #hardcoded fix to check if gt is one-hot
-            target = flatten_one_hot(target)
-        if use_in2:
-            in2 = np.load(findin2[idx])
-            data.append(torch.from_numpy(in2[np.newaxis,:]).float())
+    tgtonehot = np.load(allfindgts[0]).ndim>2 #are targets one hot encoded?
+
+    data = [torch.stack([torch.from_numpy(np.load(i1)).float() for i1 in allfindin1], dim=0)]
+    target = [flatten_one_hot(np.load(g)) if tgtonehot else np.load(g) for g in allfindgts] 
+       
+    if use_in2:
+        in2 = torch.stack([torch.from_numpy(np.load(i2)).float() for i2 in allfindin2], dim=0)
+        data.append(torch.from_numpy(in2[np.newaxis,:]).float())
     
-        out = net(*data)
-        #out = flatten_one_hot(out[0,...].detach().squeeze().numpy()) 
-        out = flatten_one_hot(out.detach().squeeze().numpy()) 
-  #      target, out = CenterCropTensor(target, out) #crop to be more comparable?
-        
+    out = net(*data)
+    outs = [flatten_one_hot(o.detach().squeeze().numpy()) for o in out] 
+  # target, out = CenterCropTensor(target, out) #crop to be more comparable?
+
+    fig = plt.figure(figsize=(10, allL*6)) 
+    for ind in range(1, len(outs)+1):  
         #now plot :)
-        plt.subplot(L,2,ind)
+        plt.subplot(allL,2,2*ind-1)
         plt.title('GT')
         plt.axis('off')
-        plt.imshow(target, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
-        plt.subplot(L,2,ind+1)
+        plt.imshow(target[ind-1], cmap='Spectral', vmin=0, vmax=Arg['n_class'])
+        plt.subplot(allL,2,2*ind)
         plt.title('OUT')
         plt.axis('off')
-        im = plt.imshow(out, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
-        ind = ind+2
+        im = plt.imshow(outs[ind-1], cmap='Spectral', vmin=0, vmax=Arg['n_class'])
         
         values = np.arange(Arg['n_class'])
         colors = [ im.cmap(im.norm(value)) for value in values]
@@ -125,3 +138,6 @@ def plotOutput(params, datafolder, pid):
 #plotOutput('unet', 'POEM', '500026_0')
 
 # %%
+#plotOutput('unet_batch8', 'POEM80', ['subj500357_28_0','subj500086_39_0', 'subj500124_69_0','subj500357_32_0',
+#'subj500288_64_1', 'subj500348_31_0','subj500348_42_0',
+#'subj500061_26_0'])

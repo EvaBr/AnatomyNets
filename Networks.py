@@ -27,10 +27,10 @@ class DoubleConv(nn.Module):
 
         self.block = nn.Sequential(
             nn.Conv2d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
-            nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels, track_running_stats=False),
             nn.PReLU(), #(P)relu?
             nn.Conv2d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels, track_running_stats=False),
         )
         self.act = nn.PReLU()
     

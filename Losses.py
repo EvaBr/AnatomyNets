@@ -1,5 +1,7 @@
 from torch import nn, einsum, Tensor
 import torch
+from functools import reduce
+from operator import add
 
 class MultiTaskLoss():
     def __init__(self, lossdict, trainable=False):
@@ -15,10 +17,10 @@ class MultiTaskLoss():
         if trainable:
             self.sigma = nn.Parameter(torch.tensor(loss_ws))
         
-    def __call__(self, out, target):
-        loss = torch.as_tensor([s*loss_fn(out, target) for s, loss_fn in zip(self.sigma, self.losses)])
-        loss.requires_grad_()
-        return loss.sum()
+    def __call__(self, out: Tensor, target: Tensor):
+        losses: List[Tensor] = [s*loss_fn(out, target) for s, loss_fn in zip(self.sigma, self.losses)]
+       # assert all(l.requires_grad for l in losses)
+        return reduce(add, losses)
 
 
 class CrossEntropy():
@@ -37,27 +39,26 @@ class CrossEntropy():
 class GeneralizedDice():
     def __init__(self, **kwargs):
         self.idc: List[int] = kwargs["idc"]
-        self.epsilon: float = kwargs["epsilon"] if "epsilon" in kwargs else 1.
+        self.epsilon: float = kwargs["epsilon"] if "epsilon" in kwargs else 1
         self.strategy: float = kwargs["strategy"] if "strategy" in kwargs else None
         assert self.strategy in [None, "volume", "normalize"], "Wrong option when choosing strategy."
 
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
-        pc = probs[:, self.idc, ...].type(torch.float32).exp()
+        pc = probs[:, self.idc, ...].exp().type(torch.float32)
         tc = target[:, self.idc, ...].type(torch.float32)
 
-        #w: Tensor = 1. / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
-        w: Tensor = einsum("bcwh->bc", tc).float()
-        if self.strategy=="volume":
-            w = torch.where(w!=0., 
-                1/torch.max(w, torch.ones_like(w)*1e-4)**2,
-                torch.zeros_like(w)
-            )
-        elif self.strategy=="normalize":
-            w = torch.div(w.T, w.sum(1)).T
-
-        elif self.strategy==None:
-            w = 1. / (( w + 1e-10 )**2)
+        w: Tensor = 1. / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
+        #w: Tensor = einsum("bcwh->bc", tc).float()
+        #if self.strategy=="volume":
+        #    w = torch.where(w!=0., 
+        #        1/torch.max(w, torch.ones_like(w)*1e-4)**2,
+        #        torch.zeros_like(w)
+        #    )
+        #elif self.strategy=="normalize":
+        #    w = torch.div(w.T, w.sum(1)).T
+        #elif self.strategy==None:
+        #    w = 1. / (( w + 1e-10 )**2)
 
         intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
         union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))

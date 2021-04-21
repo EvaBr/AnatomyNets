@@ -78,7 +78,8 @@ def setup(args: argparse.Namespace):
     
     model = net.to(device)
  #   loss = MultiTaskLoss(args.losses)
-    loss = CrossEntropy(idc = [0,3,4])
+ #   loss = CrossEntropy(idc = [0,1,2,3,4,5,6])
+    loss = GeneralizedDice(idc = [0,1,2,3,4,5,6])
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
@@ -106,6 +107,7 @@ def train(args: argparse.Namespace):
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
          #   print([i.shape for i in data])
             out = model(*data)
+            
          #   print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
             target, out = CenterCropTensor(target, out)
@@ -120,14 +122,15 @@ def train(args: argparse.Namespace):
 
             status = {"loss": loss.item(), "Dice": dice.detach().cpu().numpy()} #is there a way to print nicely without copying to cpu?
             train_iterator.set_postfix(status) #description(status)
-
-       # if args.debug and epoch%5==0:
-       #     plt.figure()
-       #     plt.subplot(1,2,1)
-       #     plt.imshow(flatten_one_hot(target[0,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
-       #     plt.subplot(1,2,2)
-       #     plt.imshow(flatten_one_hot(out[0,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
-       #     plt.show()
+            
+        if args.debug and epoch%5==0:
+            plt.figure()
+            for elem in range(1, args.batch_size+1):
+                plt.subplot(args.batch_size,2,2*elem-1)
+                plt.imshow(flatten_one_hot(target[elem-1,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
+                plt.subplot(args.batch_size,2,2*elem)
+                plt.imshow(flatten_one_hot(out[elem-1,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
+            plt.show()
 
         
         #save results:
@@ -190,8 +193,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--save_as", type=str, required=True)
     parser.add_argument("--cpu", action="store_true")
 
-    sys.argv = ['Training.py', '--dataset=POEM80', '--batch_size=8', '--network=UNet', '--n_epoch=21', '--l_rate=1e-3',
-                "--losses=[('CrossEntropy', {'idc': [4]}, 1)]", "--save_as=unet_one_subj_ce", '--debug']
+    sys.argv = ['Training.py', '--dataset=POEM80', '--batch_size=8', '--network=UNet', '--n_epoch=15', '--l_rate=1e-3',
+                "--losses=[('CrossEntropy', {'idc': [0,1,2,3,4,5,6]}, 1)]", "--save_as=unet_mtl_ce", '--debug']
 
     args = parser.parse_args()
     print(args)
