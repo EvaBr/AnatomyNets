@@ -156,6 +156,50 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
             out_file.write(str(sampling))
 
 
+def cutPOEMslices():
+    outpath = f"POEM_slices/TRAIN"
+    pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
+    for i in ['gt','in1','in2']:
+        pathlib.Path(f"POEM_slices/{i}").mkdir(parents=True, exist_ok=True)
+
+    #POEM SLICING
+    gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
+    wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
+    fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
+    dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
+    dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
+   
+    gt_paths.sort()
+    wat_paths.sort()
+    fat_paths.sort()
+    dtx_paths.sort()
+    dty_paths.sort()
+   
+    for w,f,g,dx,dy in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths):
+        PID = re.findall(r"500[0-9]+", w)[0]
+        print(f"Slicing nr {PID}...")
+        wat = nib.load(w).get_fdata()
+        fat = nib.load(f).get_fdata()
+        gt = nib.load(g).get_fdata()
+        x = nib.load(dx).get_fdata()
+        y = nib.load(dy).get_fdata()
+        
+        gt = get_one_hot(gt, 7) #new size C x H x W x D
+
+        slajsi_where = gt.sum(dim=(0,1,3))
+        slajsi = np.arange(wat.shape[1])
+        slajsi = slajsi[slajsi_where>0]
+
+        for slajs in tqdm( slajsi ):
+            allin = [wat[:, slajs, ...], fat[:, slajs, ...], x[:,slajs,...], y[:,slajs,...]]
+            allin = np.stack(allin, axis=0)
+            gt_part = gt[:, :,  slajs, :]
+        
+            np.save(f"POEM_slices/in1/subj{PID}_{slajs}_0", allin)
+            np.save(f"POEM_slices/gt/subj{PID}_{slajs}_0", gt_part)
+
+
+    
 
 
 def train_val_splitPOEM(datafolder, val_subjects = 15):
