@@ -186,16 +186,18 @@ def cutPOEMslices():
         
         gt = get_one_hot(gt, 7) #new size C x H x W x D
 
-        slajsi_where = gt.sum(dim=(0,1,3))
+        slajsi_where = gt[1:, ...].sum(axis=(0,1,3))
         slajsi = np.arange(wat.shape[1])
         slajsi = slajsi[slajsi_where>0]
 
         for slajs in tqdm( slajsi ):
             allin = [wat[:, slajs, ...], fat[:, slajs, ...], x[:,slajs,...], y[:,slajs,...]]
             allin = np.stack(allin, axis=0)
+            quasidownsmp = allin[:, 0::3, 0::3]
             gt_part = gt[:, :,  slajs, :]
         
             np.save(f"POEM_slices/in1/subj{PID}_{slajs}_0", allin)
+            np.save(f"POEM_slices/in2/subj{PID}_{slajs}_0", quasidownsmp)
             np.save(f"POEM_slices/gt/subj{PID}_{slajs}_0", gt_part)
 
 
@@ -204,6 +206,11 @@ def cutPOEMslices():
 
 def train_val_splitPOEM(datafolder, val_subjects = 15):
     #randomly chooses val_subject pids, and moves corresponding patches to VAL datafolder. 
+    #check first if TRAIN exists:
+    if not pathlib.Path(datafolder, "TRAIN").exists():
+        pathlib.Path(datafolder, "TRAIN").mkdir(parents=True)
+        for pp in ['gt', 'in1', 'in2']:
+            pathlib.Path(datafolder, pp).rename(pathlib.Path(datafolder, "TRAIN", pp))
 
     #prepare folders for saving:
     outpath = f"{datafolder}/VAL"
@@ -213,6 +220,7 @@ def train_val_splitPOEM(datafolder, val_subjects = 15):
 
     #find all pids that should be in TRAIN atm
     all_paths = [p for p in pathlib.Path(datafolder).glob("**/*.npy")]
+    
     pids = np.random.choice(np.unique([re.findall(r"500[0-9]+", fil.name)[0] for fil in all_paths]), size=val_subjects, replace=False)
     to_move = [fil for fil in all_paths if re.findall(r"500[0-9]+", fil.name)[0] in pids]
     for fil in to_move:
