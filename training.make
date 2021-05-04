@@ -4,40 +4,57 @@ SHELL = /usr/bin/zsh
 EPC = 50
 
 
-DATA = --dataset='POEM'
+DATA = --dataset='POEM80_dt'
 
-TRN = RESULTS/poem/gdl1 RESULTS/poem/gdl1_w RESULTS/poem/gdl2 RESULTS/poem/gdl2_w 
+TRN1 = RESULTS/poem/unet_w RESULTS/poem/deepmed_w RESULTS/poem/pnet_w 
+TRN2 = RESULTS/poem/unet_w_dt RESULTS/poem/deepmed_w_dt RESULTS/poem/pnet_w_dt
 
-
-RESULTS/poem/gdl1: SV = unet_gdl
-RESULTS/poem/gdl1: OPT = --losses="[('GeneralizedDice', {'idc': [1, 4]}, 0.5), ('GeneralizedDice', {'idc': [2, 5, 6]}, 0.4), \
-					('GeneralizedDice', {'idc': [3]},  0.35), ('CrossEntropy', {'idc': [0]}, 0.15), \
-					('CrossEntropy', {'idc': [1,2,3,4,5,6]}, 1)]" \
+RESULTS/poem/unet_w: SV = unet
+RESULTS/poem/unet_w: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
+					('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" \
 					"--save_as=$(SV)" '--network=UNet' '--schedule'
 
 
-RESULTS/poem/gdl1_w: SV = unet_gdl_w
-RESULTS/poem/gdl1_w: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.15, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
-					('WeightedCrossEntropy', {'idc': [0.15, 1, 1, 1, 1, 1, 1]}, 1)]" \
+RESULTS/poem/deepmed_w: SV = deepmed
+RESULTS/poem/deepmed_w: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
+					('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" \
+					"--save_as=$(SV)" '--network=DeepMedic' '--schedule'
+
+
+RESULTS/poem/pnet_w: SV = pnet
+RESULTS/poem/pnet_w: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
+					('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" \
+					"--save_as=$(SV)" '--network=PSPNet' '--schedule'
+
+
+RESULTS/poem/unet_w_dt: SV = unet_dt
+RESULTS/poem/unet_w_dt: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
+					('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" \
 					"--save_as=$(SV)" '--network=UNet' '--schedule'
 
-RESULTS/poem/gdl2: SV = unet2_gdl
-RESULTS/poem/gdl2: OPT = --losses="[('GeneralizedDice', {'idc': [1, 4]}, 0.5), ('GeneralizedDice', {'idc': [2, 5, 6]}, 0.4), \
-					('GeneralizedDice', {'idc': [3]},  0.35), ('CrossEntropy', {'idc': [0]}, 0.15), \
-					('CrossEntropy', {'idc': [1,2,3,4,5,6]}, 1)]" \
-					"--save_as=$(SV)" '--network=UNet2' '--schedule'
+
+RESULTS/poem/deepmed_w_dt: SV = deepmed_dt
+RESULTS/poem/deepmed_w_dt: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
+					('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" \
+					"--save_as=$(SV)" '--network=DeepMedic' '--schedule'
 
 
-RESULTS/poem/gdl2_w: SV = unet2_gdl_w
-RESULTS/poem/gdl2_w: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.15, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
-					('WeightedCrossEntropy', {'idc': [0.15, 1, 1, 1, 1, 1, 1]}, 1)]" \
-					"--save_as=$(SV)" '--network=UNet2' '--schedule'
+RESULTS/poem/pnet_w_dt: SV = pnet_dt
+RESULTS/poem/pnet_w_dt: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), \
+					('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" \
+					"--save_as=$(SV)" '--network=PSPNet' '--schedule'
 
-all: $(TRN)
-$(TRN):
+all: $(TRN1) $(TRN2)
+$(TRN1):
 	mkdir -p $@_tmp
 	$(CC) $(CFLAGS) Training.py --batch_size=8 --l_rate=1e-3 \
-		--n_epoch=$(EPC) $(OPT) $(DATA)
+		--n_epoch=$(EPC) --in_chan 0 1 --lower_in_chan 0 1 $(OPT) $(DATA)
 	mv $@_tmp $@ 
 	mv RESULTS/$(SV)* $@/.
 	
+$(TRN2):
+	mkdir -p $@_tmp
+	$(CC) $(CFLAGS) Training.py --batch_size=8 --l_rate=1e-3 \
+		--n_epoch=$(EPC) --in_chan 0 1 2 3 --lower_in_chan 0 1 2 3 $(OPT) $(DATA)
+	mv $@_tmp $@ 
+	mv RESULTS/$(SV)* $@/.

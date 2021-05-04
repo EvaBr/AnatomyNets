@@ -1,5 +1,5 @@
 import Networks
-from Losses import MultiTaskLoss, DicePerClass, GeneralizedDice, CrossEntropy
+from Losses import MultiTaskLoss, DicePerClass, GeneralizedDice, CrossEntropy, DicePerClassBinary
 from Dataloaders import get_loaders
 import argparse
 import torch
@@ -55,7 +55,7 @@ def save_run(train_m, val_m, model, optimizer, save_to, epoch):
 def setup(args: argparse.Namespace):
     device = torch.device("cpu") if (not torch.cuda.is_available() or args.cpu) else torch.device("cuda")
 
-    net = getattr(Networks, args.network)(args.in_channels, args.n_class, args.lower_in_channels, args.extractor_net)
+    net = getattr(Networks, args.network)(len(args.in_channels), args.n_class, len(args.lower_in_channels), args.extractor_net)
     net = net.float()
     to_init = Networks.weights_init(args.network)
     net.apply(to_init)
@@ -78,7 +78,7 @@ def setup(args: argparse.Namespace):
     
     model = net.to(device)
     loss = MultiTaskLoss(args.losses, device)
-    train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.batch_size, args.debug)
+    train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.in_channels, args.lower_in_channels, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
 
@@ -118,7 +118,7 @@ def train(args: argparse.Namespace):
             loss.backward()
             optimizer.step()
 
-            dice = DicePerClass(out.detach(), target.detach())
+            dice = DicePerClassBinary(out.detach(), target.detach())
             epoch_train_metrics["Loss"] += loss.item()
             epoch_train_metrics["Dice"] += dice.detach()
 
@@ -154,12 +154,12 @@ def train(args: argparse.Namespace):
                 out = model(*data)
                 target, out = CenterCropTensor(target, out)
                 loss = loss_fn(out, target)
-                dice = DicePerClass(out.detach(), target.detach())
+                dice = DicePerClassBinary(out.detach(), target.detach())
                 epoch_val_metrics["Loss"] += loss.item()
                 epoch_val_metrics["Dice"] += dice.detach()
 
 
-                status = {"loss": loss.item(), "Dice":dice.detach().cpu().numpy()}
+                status = {"loss": loss.item(), "Dice": dice.detach().cpu().numpy()}
                 val_iterator.set_postfix(status) #description(status)
 
 
@@ -174,7 +174,7 @@ def train(args: argparse.Namespace):
                 print(f"> Best epoch so far: {best_epoch}")
         #Let's empty cache after each epoch just in case that helps memory issues... 
         #torch.cuda.empty_cache()
-        if args.schedule and (epoch+1 % (best_epoch + 10) == 0):  # Yeah, ugly but will clean that later
+        if args.schedule and (epoch+1 % (best_epoch + 10) == 0):  
             for param_group in optimizer.param_groups:
                 lr *= 0.5
                 param_group['lr'] = lr
@@ -191,10 +191,10 @@ def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Hyperparams')
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument("--n_class", type=int, default=7)
-    parser.add_argument("--in_channels", type=int, default=2)
+    parser.add_argument("--in_channels", nargs='+', type=int, default=[0,1], help="Indxs of channels to use, if not all channels desirable.")
     parser.add_argument("--network", type=str, required=True, help="The network to use")
     parser.add_argument("--extractor_net", type=str, default='resnet34', help="Extractor net name, if using PSPNet.")
-    parser.add_argument("--lower_in_channels", type=int, default=2, help="Nr of in.channels for lower pathway, if using DeepMedic.")
+    parser.add_argument("--lower_in_channels", nargs='+', type=int, default=[0,1], help="Indxs of in.channels for lower pathway, if using DeepMedic.")
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--n_epoch', nargs='?', type=int, default=100, help='# of the epochs')
     parser.add_argument('--l_rate', nargs='?', type=float, default=5e-4, help='Learning Rate')

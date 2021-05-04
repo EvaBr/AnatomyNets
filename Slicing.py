@@ -219,25 +219,6 @@ def train_val_splitPOEM(datafolder, val_subjects = 15):
         fil.replace(pathlib.Path(re.sub("TRAIN", "VAL", str(fil))))
 
 
-# %%
-#outpath = "POEM110"
-#add_dts = False
-#make_subsampled = True
-#patch_size = 110
-
-#cutPOEM(patch_size, make_subsampled, add_dts, outpath)
-#now all cut imges are saved in training. If you want also val data, use POEM_train_val_split:
-#train_val_splitPOEM('POEM110', 15)
-# %%
-#outpath = "POEM_sampled"
-#add_dts = False
-#make_subsampled = True
-#patch_size = 110
-#sampling = [5, 8, 10, 6, 15, 15, 10]
-
-#cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling)
-#train_val_splitPOEM('POEM_sampled', 15)
-
 
 # %%
 #perhaps training using only slices with at least one other class than background would be better?
