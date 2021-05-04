@@ -5,11 +5,12 @@ from operator import add
 from typing import List, cast
 
 class MultiTaskLoss():
-    def __init__(self, lossdict, trainable=False):
+    def __init__(self, lossdict, device, trainable=False):
         losses = eval(lossdict)
         loss_fns: List[Callable] = []
         loss_ws: List[float] = []
         for loss_name, loss_params, weight in losses:
+            loss_params['device'] = device
             loss_fns.append(globals()[loss_name](**loss_params))
             loss_ws.append(weight)
 
@@ -42,7 +43,7 @@ class WeightedCrossEntropy():
         self.idc: List[int] = [i for i,v in enumerate(idc) if v>0]
         #If a class should be ignored, simply set weight=0 for that class.
         device = kwargs["device"]
-        self.weights = torch.tensor([i for i in idc if i>0]).float().view(1, len(self.idc)).to(device)
+        self.weights = torch.tensor([i for i in idc if i>0]).float().to(device)
 
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
@@ -52,7 +53,7 @@ class WeightedCrossEntropy():
         loss = - einsum("bcwh,bcwh->c", mask, log_p)
         loss = torch.dot(loss, self.weights)
 
-        mask = einsum("bcwh->c")
+        mask = einsum("bcwh->c", mask)
         mask = torch.dot(mask, self.weights)
         #loss /= max(mask.sum(), 1e-10) #mask.sum() + 1e-10
         loss /= mask + 1e-10
@@ -98,7 +99,7 @@ class WeightedGeneralizedDice():
         self.idc: List[int] = [i for i,v in enumerate(idc) if v>0]
         #If a class should be ignored, simply set weight=0 for that class.
         device = kwargs["device"]
-        self.weights = torch.tensor([i for i in idc if i>0]).float().view(1, len(self.idc)).to(device)
+        self.weights = torch.tensor([i for i in idc if i>0]).float().to(device)
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
         pc = probs[:, self.idc, ...].type(torch.float32)
@@ -125,9 +126,8 @@ def DicePerClass(probs: Tensor, target: Tensor):
     pc = probs.type(torch.float32).exp()
     tc = target.type(torch.float32)
     
-    w: Tensor = 1. / ((einsum("bcwh->bc", tc).type(torch.float32) + 1e-10) ** 2)
-    intersection: Tensor = w * einsum("bcwh,bcwh->bc", pc, tc)
-    union: Tensor = w * (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
+    intersection: Tensor = einsum("bcwh,bcwh->bc", pc, tc)
+    union: Tensor = (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
 
     divided: Tensor = (2 * intersection + 1e-10) / (union + 1e-10)
     #if class present neither in GT nor OUT in the whole batch, the output==1
@@ -135,6 +135,25 @@ def DicePerClass(probs: Tensor, target: Tensor):
     loss = divided.mean(dim=0) #average over batch. Output size should be C=nb_classes
     return loss
 
+
+def AllDices(probs: Tensor, target: Tensor):
+    pc = probs.type(torch.float32).exp()
+    pc_bin = torch.argmax(pc, dim=1, keepdim=True) #better report it on binary outs.
+    pc = pc.zero_()
+    pc = pc.scatter_(1, pc_bin, 1) #torch.ones(pc_bin.size()))
+    tc = target.type(torch.float32)
+    
+    intersection: Tensor = einsum("bcwh,bcwh->bc", pc, tc)
+    union: Tensor = (einsum("bcwh->bc", pc) + einsum("bcwh->bc", tc))
+
+    divided: Tensor = (2 * intersection + 1e-10) / (union + 1e-10)
+    #if class present neither in GT nor OUT in the whole batch, the output==1
+
+    return divided
+
+def DicePerClassBinary(probs: Tensor, target: Tensor):
+    divided = AllDices(probs, target)
+    return divided.mean(dim=0)
 
 class FocalLoss():
     def __init__(self, **kwargs):

@@ -22,7 +22,7 @@ def flatten_one_hot(one_hot):
     return np.argmax(one_hot, axis=0)
 
 def check2Dcuts(datafolder, pid, inp2=False):
-    findit = glob(f"./{datafolder}/*/*/subj{pid}.npy")
+    findit = glob(f"./{datafolder}/*/*/*{pid}.npy")
     findit.sort()
     in1 = np.load(findit[1])
     if inp2:

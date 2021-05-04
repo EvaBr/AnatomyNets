@@ -77,9 +77,7 @@ def setup(args: argparse.Namespace):
                     state[k] = v.to(device)
     
     model = net.to(device)
- #   loss = MultiTaskLoss(args.losses)
- #   loss = CrossEntropy(idc = [0,1,2,3,4,5,6])
-    loss = GeneralizedDice(idc = [0,1,2,3,4,5,6])
+    loss = MultiTaskLoss(args.losses, device)
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
@@ -88,12 +86,16 @@ def setup(args: argparse.Namespace):
 
 def train(args: argparse.Namespace):
     torch.autograd.set_detect_anomaly(True)
+    lr: float = args.l_rate
     model, optimizer, loss_fn, train_loader, val_loader, device, start_epoch = setup(args)
 
     train_metrics = {"Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
                      "Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32)}
     val_metrics = {"val_Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
                    "val_Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32)}
+
+    best_epoch: int = start_epoch
+    best_avg_dice: float = 0
     for epoch in range(start_epoch, args.n_epoch+start_epoch):
         #train
         model.train()
@@ -166,8 +168,18 @@ def train(args: argparse.Namespace):
                 val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
             print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
 
+            if best_avg_dice<val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean():
+                best_epoch = epoch - start_epoch
+                best_avg_dice = val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean()
+                print(f"> Best epoch so far: {best_epoch}")
         #Let's empty cache after each epoch just in case that helps memory issues... 
         #torch.cuda.empty_cache()
+        if args.schedule and (epoch+1 % (best_epoch + 10) == 0):  # Yeah, ugly but will clean that later
+            for param_group in optimizer.param_groups:
+                lr *= 0.5
+                param_group['lr'] = lr
+                print(f'> New learning Rate: {lr}')
+
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
 
 
@@ -192,9 +204,10 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
     parser.add_argument("--cpu", action="store_true")
+    parser.add_argument("--schedule", action="store_true")
 
-    sys.argv = ['Training.py', '--dataset=POEM80', '--batch_size=8', '--network=UNet', '--n_epoch=15', '--l_rate=1e-3',
-                "--losses=[('CrossEntropy', {'idc': [0,1,2,3,4,5,6]}, 1)]", "--save_as=unet_mtl_ce", '--debug']
+   # sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=8', '--network=UNet', '--n_epoch=15', '--l_rate=1e-3',
+   #             "--losses=[('CrossEntropy', {'idc': [0,1,2,3,4,5,6]}, 1)]", "--save_as=unet_mtl_ce", '--debug']
 
     args = parser.parse_args()
     print(args)
