@@ -1,7 +1,7 @@
 CC = python3.6
 SHELL = /usr/bin/zsh
 
-EPC = 50
+EPC = 100
 
 
 DATA = --dataset='POEM80_dt'
@@ -47,14 +47,14 @@ RESULTS/poem/pnet_w_dt: OPT = --losses="[('WeightedGeneralizedDice', {'idc': [0.
 all: $(TRN1) $(TRN2)
 $(TRN1):
 	mkdir -p $@_tmp
-	$(CC) $(CFLAGS) Training.py --batch_size=8 --l_rate=1e-3 \
+	$(CC) $(CFLAGS) Training.py --batch_size=32 --l_rate=1e-3 \
 		--n_epoch=$(EPC) --in_chan 0 1 --lower_in_chan 0 1 $(OPT) $(DATA)
 	mv $@_tmp $@ 
 	mv RESULTS/$(SV)* $@/.
 	
 $(TRN2):
 	mkdir -p $@_tmp
-	$(CC) $(CFLAGS) Training.py --batch_size=8 --l_rate=1e-3 \
-		--n_epoch=$(EPC) --in_chan 0 1 2 3 --lower_in_chan 0 1 2 3 $(OPT) $(DATA)
+	$(CC) $(CFLAGS) Training.py --batch_size=32 --l_rate=1e-3 \
+		--n_epoch=$(EPC) --in_chan 0 1 2 3 --lower_in_chan 0 1 $(OPT) $(DATA)
 	mv $@_tmp $@ 
 	mv RESULTS/$(SV)* $@/.

@@ -110,7 +110,7 @@ class WeightedGeneralizedDice():
         intersection: Tensor = w * einsum("bkwh,bkwh->bk", pc, tc)
         union: Tensor = w * (einsum("bkwh->bk", pc) + einsum("bkwh->bk", tc))
 
-        divided: Tensor = 1 - 2 * (einsum("bk->b", intersection) + 1e-10) / (einsum("bk->b", union) + 1e-10)
+        divided: Tensor = 1 - (2 * einsum("bk->b", intersection) + 1e-10) / (einsum("bk->b", union) + 1e-10)
 
         #OPTION 2: imitate the computation that happens if you put in multiple/per-class GDL losses as args 
     #    w: Tensor = 1 / ((einsum("bkwh->bk", tc).type(torch.float32) + 1e-10) ** 2)

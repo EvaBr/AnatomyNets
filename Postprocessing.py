@@ -12,6 +12,18 @@ import random
 from Losses import DicePerClass, AllDices
 #matplotlib.use('Agg')
 
+def CenterCropTensor(tgt, x):
+    xs2, xs3 = x.shape[-2], x.shape[-1]
+    tg2, tg3 = tgt.shape[-2], tgt.shape[-1]
+    diffY = abs(xs2 - tg2)//2
+    diffX = abs(xs3 - tg3)//2
+    ostanek = abs(xs2-tg2)%2
+    
+    if xs2>tg2: 
+        x = x[..., diffX:xs2-diffX-ostanek, diffY:xs3-diffY-ostanek]
+    else: 
+        tgt = tgt[..., diffX:tg2-diffX-ostanek, diffY:tg3-diffY-ostanek] 
+    return tgt, x
 
 
 def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
@@ -38,6 +50,17 @@ def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
 #%%
 #compare_curves(['Third_unet', 'Fourth_unet'])
 # %%
+def getchn(args, string):
+    cnt = 0
+    whichchans = []
+    start = [i for i in range(len(args)) if string in args[i]]
+    for i in range(start[0]+1, len(args)):
+        if '--' in args[i]:
+            break 
+        cnt+=1
+        whichchans.append(int(args[i]))
+    return cnt, whichchans
+
 def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     """After training a net and saving its state to name PARAMS,
          run inference on subject PID from DATAFOLDER, and plot results+GT. 
@@ -49,7 +72,11 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     
     with open(f"RESULTS/poem/{params}_args.txt", "r") as ft:
         args = ft.read().splitlines()
-    args = dict([i.strip('--').split("=") for i in args if ("#" not in i and 'debug' not in i and 'schedule' not in i)])
+    tmpargs = [i.strip('--').split("=") for i in args if ('--' in i and '=' in i)]
+    chan1, whichin1 = getchn(args, 'in_chan')
+    chan2, whichin2 = getchn(args, 'lower_in_chan')
+    tmpargs += [['in_channels', chan1], ['lower_in_channels', chan2]]
+    args = dict(tmpargs)
     
     #overwrite if given in file:
     Arg.update(args)
@@ -79,6 +106,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
         findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
         findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
         findgts.sort(), findin1.sort(), findin2.sort()
+
         #all subslices in one image.
         L = len(findgts)
         if  L>20: #ugly but needed to avoid too long compute
@@ -102,35 +130,39 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
 
     tgtonehot = np.load(allfindgts[0]).ndim>2 #are targets one hot encoded?
 
-    data = [torch.stack([torch.from_numpy(np.load(i1)).float().to(device) for i1 in allfindin1], dim=0)]
+    data = torch.stack([torch.from_numpy(np.load(i1)).float().to(device) for i1 in allfindin1], dim=0)
+    data = [data[:, whichin1, ...]]
     target = [flatten_one_hot(np.load(g)) if tgtonehot else np.load(g) for g in allfindgts] 
     target_oh = torch.stack([torch.from_numpy(np.load(g)).to(device) if tgtonehot else torch.from_numpy(get_one_hot(np.load(g),7)).to(device) for g in allfindgts], dim=0)
        
     if use_in2:
         in2 = torch.stack([torch.from_numpy(np.load(i2)).float().to(device) for i2 in allfindin2], dim=0)
-        data.append(in2)
+        data.append(in2[:, whichin2, ...])
     
     out = net(*data)
+    target_oh, out = CenterCropTensor(target_oh, out)
     dices = AllDices(out, target_oh) #DicePerClass(out, target_oh)
-    
+  #  print((out.shape, target_oh.shape))
     outs = [flatten_one_hot(o.detach().squeeze().numpy()) for o in out] 
-  # target, out = CenterCropTensor(target, out) #crop to be more comparable?
-  
+    
     fig, ax_tuple = plt.subplots(nrows=allL, ncols=2, figsize = (10, allL*6), tight_layout = True)
     #for compatibility reasons:
     if ax_tuple.ndim<2:
         ax_tuple = ax_tuple[np.newaxis, ...]
     for ind in range(len(outs)):  
         #now plot :)
+        targetind, outsind = CenterCropTensor(target[ind], outs[ind]) #crop to be more comparable
+      #  print((outsind.shape, targetind.shape))
+
         ax1 = ax_tuple[ind, 0]
         ax1.set_title('GT')
         ax1.axis('off')
-        ax1.imshow(target[ind], cmap='Spectral', vmin=0, vmax=Arg['n_class'])
+        ax1.imshow(targetind, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
         
         ax2 = ax_tuple[ind, 1]
         ax2.set_title('OUT')
         ax2.axis('off')
-        im = ax2.imshow(outs[ind], cmap='Spectral', vmin=0, vmax=Arg['n_class'])
+        im = ax2.imshow(outsind, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
         
         values = np.arange(Arg['n_class'])
         colors = [ im.cmap(im.norm(value)) for value in values]

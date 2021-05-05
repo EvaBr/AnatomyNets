@@ -10,25 +10,13 @@ import pandas as pd
 import sys
 import numpy as np
 import os
-
+from Postprocessing import CenterCropTensor
 from Slicing import flatten_one_hot
 import matplotlib.pyplot as plt 
 
 np.set_printoptions(precision=3, suppress=True)
 torch.set_printoptions(precision=3, sci_mode=False)
 
-def CenterCropTensor(tgt, x):
-    xs2, xs3 = x.shape[2], x.shape[3]
-    tg2, tg3 = tgt.shape[2], tgt.shape[3]
-    diffY = abs(xs2 - tg2)//2
-    diffX = abs(xs3 - tg3)//2
-    ostanek = abs(xs2-tg2)%2
-    
-    if xs2>tg2: 
-        x = x[..., diffX:xs2-diffX-ostanek, diffY:xs3-diffY-ostanek]
-    else: 
-        tgt = tgt[..., diffX:tg2-diffX-ostanek, diffY:tg3-diffY-ostanek] 
-    return tgt, x
 
 def save_run(train_m, val_m, model, optimizer, save_to, epoch):
     """Saves the final state of network for re-loading, and CSV of metrics, and a txt file of args used for the run."""
