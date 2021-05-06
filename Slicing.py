@@ -7,6 +7,7 @@ import random
 import re
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from scipy.ndimage import distance_transform_edt as dt_edt
 
 
 #%%
@@ -48,7 +49,8 @@ def check2Dcuts(datafolder, pid, inp2=False):
 
 
 #%%
-def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
+def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sliced=1, sampling=None):
+    #sliced je lahko 0,1 ali 2. pove po katerem indexu naredimo slice. 
     #prepare folders for saving:
     outpath = f"{outpath}/TRAIN"
     pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
@@ -69,12 +71,17 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
     dtx_paths.sort()
     dty_paths.sort()
     mask_paths.sort()
+    assert len(gt_paths)==len(wat_paths)==len(fat_paths)==len(dtx_paths)==len(dty_paths)==len(mask_paths)
 
     nb_class = 7
     patch = patch_size//2
-    
+
+    slicing = ":,"*sliced + "slajs" + ",:"*(2-sliced) + "]"  
+    print(f"\nSLICING: [{slicing}\n")
     for w,f,g,dx,dy,m in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths, mask_paths):
-        PID = re.findall(r"500[0-9]+", w)[0]
+        PIDs = [re.findall(r"500[0-9]+", ppp)[0] for ppp in [w,f,g,dx,dy,m]]
+        assert len(np.unique(PIDs)) == 1
+        PID = PIDs[0]
         print(f"Slicing nr {PID}...")
         wat = nib.load(w).get_fdata()
         fat = nib.load(f).get_fdata()
@@ -83,20 +90,34 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
         y = nib.load(dy).get_fdata()
         maska = nib.load(m).get_fdata()
 
+        tmp_z = np.ones(maska.shape)
+        startz, endz = np.nonzero(maska.sum(axis=(0,1)))[0][0], np.nonzero(maska.sum(axis=(0,1)))[0][-1]
+        tmp_z[:,:,startz] = 0
+        tmp_z = 2.*dt_edt(tmp_z)/(endz-startz) - 1.
+
+        z = maska*tmp_z#create artificially, simply DT from left to right
+        bd = dt_edt(maska) #create artificially, simply DT from border
+        bd = bd/np.max(bd)
+
         gt = get_one_hot(gt, nb_class) #new size C x H x W x D
 
-        inx = wat.shape[0]//patch_size
-        iny = wat.shape[2]//patch_size
+        inx = wat.shape[1-(sliced>0)]//patch_size
+        iny = wat.shape[2-(sliced==2)]//patch_size
         to_cut = 2 #max(4, inx*iny)
+
+        dict_tmp = {}
 
         if sampling==None:
             #if no sampling given, we cut randomly a few (to_cut=2?) patches from EACH slice.
-            dict_tmp = { s: [random.choice(np.argwhere(maska[:,s,:]==1)) for i in range(to_cut)] for s in range(wat.shape[1]) }
+           # print((maska.shape, wat.shape))
+            for slajs in range(maska.shape[sliced]):
+                kjeso = eval(f"np.argwhere(maska[{slicing}==1)")
+                if len(kjeso)>to_cut:
+                    dict_tmp[slajs] = [random.choice(kjeso) for i in range(to_cut)]
 
         else: 
             assert len(sampling)==nb_class, f"Sampling variable should be an array of length 7!"
             #let's make a dict of all the slices(keys) and indeces (value lists)
-            dict_tmp = {}
             for organ, nr_samples in enumerate(sampling):
                 possible = np.argwhere( (gt[organ, ...]*maska) == 1)
                 Ll = len(possible)
@@ -106,16 +127,18 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
 
                 for onesample in samples:
                     if onesample[1] not in dict_tmp:
-                        dict_tmp[onesample[1]] = []
-                    dict_tmp[onesample[1]].append([onesample[0], onesample[2]])
+                        dict_tmp[onesample[sliced]] = []
+                    dict_tmp[onesample[sliced]].append([onesample[left] for left in range(3) if left!=sliced])
             
         for slajs, indexes in tqdm( dict_tmp.items() ):
 
-            wat_tmp = np.pad(np.squeeze(wat[:, slajs, :]),(patch+16,))
-            fat_tmp = np.pad(np.squeeze(fat[:, slajs, :]),(patch+16,))
-            gt_tmp = np.pad(np.squeeze(gt[:,:, slajs, :]),((0,0), (patch+16,patch+16), (patch+16,patch+16)))
-            x_tmp = np.pad(np.squeeze(x[:, slajs, :]),(patch+16,))
-            y_tmp = np.pad(np.squeeze(y[:, slajs, :]),(patch+16,))
+            wat_tmp = np.pad(np.squeeze(eval(f"wat[{slicing}")),(patch+16,))
+            fat_tmp = np.pad(np.squeeze(eval(f"fat[{slicing}")),(patch+16,))
+            gt_tmp = np.pad(np.squeeze(eval(f"gt[:,{slicing}")),((0,0), (patch+16,patch+16), (patch+16,patch+16)))
+            x_tmp = np.pad(np.squeeze(eval(f"x[{slicing}")),(patch+16,))
+            y_tmp = np.pad(np.squeeze(eval(f"y[{slicing}")),(patch+16,))
+            z_tmp = np.pad(np.squeeze(eval(f"z[{slicing}")),(patch+16,))
+            bd_tmp = np.pad(np.squeeze(eval(f"bd[{slicing}")),(patch+16,))
 
             for counter,index in enumerate(indexes):
                 startx = index[0]+16
@@ -129,6 +152,8 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
                 if add_dts:
                     allin.append(x_tmp[startx:endx, starty:endy])
                     allin.append(y_tmp[startx:endx, starty:endy])
+                    allin.append(z_tmp[startx:endx, starty:endy])
+                    allin.append(bd_tmp[startx:endx, starty:endy])
 
                 allin = np.stack(allin, axis=0)
                 gt_part = gt_tmp[:, startx:endx, starty:endy]
@@ -147,6 +172,8 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
                     if add_dts:
                         allin.append(x_tmp[startx:endx:3, starty:endy:3])
                         allin.append(y_tmp[startx:endx:3, starty:endy:3])
+                        allin.append(z_tmp[startx:endx:3, starty:endy:3])
+                        allin.append(bd_tmp[startx:endx:3, starty:endy:3])
                     allin = np.stack(allin, axis=0)
 
                     np.save(f"{outpath}/in2/subj{PID}_{slajs}_{counter}", allin) 
@@ -154,9 +181,12 @@ def cutPOEM(patch_size, make_subsampled, add_dts, outpath, sampling=None):
         #save sampling strategy info 
         with open(f"{outpath}/sampling.txt", 'w') as out_file:
             out_file.write(str(sampling))
+    with open(f"{outpath}/datainfo.txt", "w") as info_file:
+        info_file.write(f"Sliced by dim {sliced}. \nPatch size: {patch_size}\nDTs: {add_dts}\nsubsmpl: {make_subsampled}")
 
 
 def cutPOEMslices():
+    #by default cuts only in axial direction. This was just for tryouts; same date as in BL project.
     outpath = f"POEM_slices/TRAIN"
     pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
     for i in ['gt','in1','in2']:
