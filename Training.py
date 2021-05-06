@@ -1,5 +1,5 @@
 import Networks
-from Losses import MultiTaskLoss, DicePerClass, GeneralizedDice, CrossEntropy, DicePerClassBinary
+from Losses import MultiTaskLoss, DicePerClassBinary, batchGDL
 from Dataloaders import get_loaders
 import argparse
 import torch
@@ -10,25 +10,13 @@ import pandas as pd
 import sys
 import numpy as np
 import os
-
+from Postprocessing import CenterCropTensor
 from Slicing import flatten_one_hot
 import matplotlib.pyplot as plt 
 
 np.set_printoptions(precision=3, suppress=True)
 torch.set_printoptions(precision=3, sci_mode=False)
 
-def CenterCropTensor(tgt, x):
-    xs2, xs3 = x.shape[2], x.shape[3]
-    tg2, tg3 = tgt.shape[2], tgt.shape[3]
-    diffY = abs(xs2 - tg2)//2
-    diffX = abs(xs3 - tg3)//2
-    ostanek = abs(xs2-tg2)%2
-    
-    if xs2>tg2: 
-        x = x[..., diffX:xs2-diffX-ostanek, diffY:xs3-diffY-ostanek]
-    else: 
-        tgt = tgt[..., diffX:tg2-diffX-ostanek, diffY:tg3-diffY-ostanek] 
-    return tgt, x
 
 def save_run(train_m, val_m, model, optimizer, save_to, epoch):
     """Saves the final state of network for re-loading, and CSV of metrics, and a txt file of args used for the run."""
@@ -39,8 +27,8 @@ def save_run(train_m, val_m, model, optimizer, save_to, epoch):
     df = pd.DataFrame({k: v.cpu().numpy().tolist() for k,v in joint_dic.items()})
     cols = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
     cols_v = [f"val_{c}" for c in cols]
-    df = pd.concat([df['Loss'], pd.DataFrame(df['Dice'].values.tolist(), columns=cols), 
-                df['val_Loss'], pd.DataFrame(df['val_Dice'].values.tolist(), columns=cols_v)], axis=1)
+    df = pd.concat([df['Loss'], df['GDL'], df['GDLbin'], pd.DataFrame(df['Dice'].values.tolist(), columns=cols), 
+                df['val_Loss'], df['val_GDL'], df['val_GDLbin'], pd.DataFrame(df['val_Dice'].values.tolist(), columns=cols_v)], axis=1)
     with open(f'RESULTS/{save_to}.csv', 'a') as f:
         df.to_csv(f, header=f.tell()==0)  #OBS if file exists, it will only append data. 
     with open(f'RESULTS/{save_to}_args.txt', 'a') as f:
@@ -90,12 +78,19 @@ def train(args: argparse.Namespace):
     model, optimizer, loss_fn, train_loader, val_loader, device, start_epoch = setup(args)
 
     train_metrics = {"Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
-                     "Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32)}
+                     "Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32),
+                     "GDL": torch.zeros((args.n_epoch,), device=device).type(torch.float32), 
+                     "GDLbin": torch.zeros((args.n_epoch,), device=device).type(torch.float32)}
     val_metrics = {"val_Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
-                   "val_Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32)}
+                   "val_Dice": torch.zeros((args.n_epoch, args.n_class), device=device).type(torch.float32),
+                   "val_GDL": torch.zeros((args.n_epoch,), device=device).type(torch.float32), 
+                   "val_GDLbin": torch.zeros((args.n_epoch,), device=device).type(torch.float32)}
 
     best_epoch: int = start_epoch
     best_avg_dice: float = 0
+    
+    numim = len(train_loader.dataset)
+    numimval = len(val_loader.dataset)
     for epoch in range(start_epoch, args.n_epoch+start_epoch):
         #train
         model.train()
@@ -104,6 +99,8 @@ def train(args: argparse.Namespace):
         
         epoch_train_metrics = {"Loss": torch.tensor(0.0, device=device), 
                             "Dice": torch.zeros((7,), device=device).type(torch.float32)}
+        GDL: float = 0
+        GDLbin: float = 0
         for data_tuple in train_iterator:
             optimizer.zero_grad()
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
@@ -119,12 +116,15 @@ def train(args: argparse.Namespace):
             optimizer.step()
 
             dice = DicePerClassBinary(out.detach(), target.detach())
+            GDL += batchGDL(out.detach(), target.detach()).sum()
+            GDLbin += batchGDL(out.detach(), target.detach(), True).sum()
             epoch_train_metrics["Loss"] += loss.item()
             epoch_train_metrics["Dice"] += dice.detach()
 
             status = {"loss": loss.item(), "Dice": dice.detach().cpu().numpy()} #is there a way to print nicely without copying to cpu?
             train_iterator.set_postfix(status) #description(status)
-            
+        
+           
         if args.debug and epoch%5==0:
             plt.figure()
             for elem in range(1, args.batch_size+1):
@@ -136,16 +136,19 @@ def train(args: argparse.Namespace):
 
         
         #save results:
-        for i in train_metrics:
+        for i in ['Loss', 'Dice']: #train_metrics:
             train_metrics[i][epoch-start_epoch, ...] = epoch_train_metrics[i]/NN
-        print(f"EPOCH {epoch}: \n [TRAIN] Loss={train_metrics['Loss'][epoch-start_epoch]}, Dice={train_metrics['Dice'][epoch-start_epoch, ...].cpu().numpy()}")
-        
+        print(f"EPOCH {epoch}: \n [TRAIN] Loss={train_metrics['Loss'][epoch-start_epoch]}, GDL={GDL/numim}, Dice={train_metrics['Dice'][epoch-start_epoch, ...].cpu().numpy()}")
+        train_metrics['GDL'][epoch-start_epoch, ...] = GDL/numim
+        train_metrics['GDLbin'][epoch-start_epoch, ...] = GDLbin/numim
+
         #validate
         model.eval()
         NN = len(val_loader)
         val_iterator = tqdm(val_loader, ncols=120, total=NN, leave=False)
         
         with torch.no_grad():
+            GDL, GDLbin = 0, 0
             epoch_val_metrics = {"Loss": torch.tensor(0.0, device=device), 
                                 "Dice": torch.zeros((7,), device=device).type(torch.float32)}
             for data_tuple in val_iterator:
@@ -155,6 +158,8 @@ def train(args: argparse.Namespace):
                 target, out = CenterCropTensor(target, out)
                 loss = loss_fn(out, target)
                 dice = DicePerClassBinary(out.detach(), target.detach())
+                GDL += batchGDL(out.detach(), target.detach()).sum()
+                GDLbin += batchGDL(out.detach(), target.detach(), True).sum()
                 epoch_val_metrics["Loss"] += loss.item()
                 epoch_val_metrics["Dice"] += dice.detach()
 
@@ -164,9 +169,9 @@ def train(args: argparse.Namespace):
 
 
             #save results
-            for i in train_metrics:
+            for i in ['Loss', 'Dice']: #train_metrics:
                 val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
-            print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
+            print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, GDL={GDL/numimval}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
 
             if best_avg_dice<val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean():
                 best_epoch = epoch - start_epoch

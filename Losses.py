@@ -102,7 +102,7 @@ class WeightedGeneralizedDice():
         self.weights = torch.tensor([i for i in idc if i>0]).float().to(device)
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
-        pc = probs[:, self.idc, ...].type(torch.float32)
+        pc = probs[:, self.idc, ...].exp().type(torch.float32)
         tc = target[:, self.idc, ...].type(torch.float32)
 
         #OPTION 1: instead of dynamically changing weights batch-based, keep them static based on input weights
@@ -110,7 +110,7 @@ class WeightedGeneralizedDice():
         intersection: Tensor = w * einsum("bkwh,bkwh->bk", pc, tc)
         union: Tensor = w * (einsum("bkwh->bk", pc) + einsum("bkwh->bk", tc))
 
-        divided: Tensor = 1 - 2 * (einsum("bk->b", intersection) + 1e-10) / (einsum("bk->b", union) + 1e-10)
+        divided: Tensor = 1 - (2 * einsum("bk->b", intersection) + 1e-10) / (einsum("bk->b", union) + 1e-10)
 
         #OPTION 2: imitate the computation that happens if you put in multiple/per-class GDL losses as args 
     #    w: Tensor = 1 / ((einsum("bkwh->bk", tc).type(torch.float32) + 1e-10) ** 2)
@@ -154,6 +154,21 @@ def AllDices(probs: Tensor, target: Tensor):
 def DicePerClassBinary(probs: Tensor, target: Tensor):
     divided = AllDices(probs, target)
     return divided.mean(dim=0)
+
+def batchGDL(probs: Tensor, target: Tensor, binary: bool = False):
+    pc = probs.type(torch.float32).exp()
+    if binary:
+        pc_bin = torch.argmax(pc, dim=1, keepdim=True) #better report it on binary outs.
+        pc = pc.zero_()
+        pc = pc.scatter_(1, pc_bin, 1)
+    tc = target.type(torch.float32)
+
+    intersection: Tensor = einsum("bcwh,bcwh->b", pc, tc)
+    union: Tensor = einsum("bcwh->b", tc) #ne bo nikoli 0. zmeri bo == numel. 
+
+    divided: Tensor = intersection / union
+   
+    return divided
 
 class FocalLoss():
     def __init__(self, **kwargs):

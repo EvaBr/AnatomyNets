@@ -22,7 +22,7 @@ def get_one_hot(gt, nb_class):
 def flatten_one_hot(one_hot):
     return np.argmax(one_hot, axis=0)
 
-def check2Dcuts(datafolder, pid, inp2=False):
+def check2Dcuts(datafolder, pid, chans=0, inp2=False):
     findit = glob(f"./{datafolder}/*/*/*{pid}.npy")
     findit.sort()
     in1 = np.load(findit[1])
@@ -34,10 +34,10 @@ def check2Dcuts(datafolder, pid, inp2=False):
     plt.subplot(1,3,1)
     plt.imshow(gt)
     plt.subplot(1,3,2)
-    plt.imshow(np.squeeze(in1[0,...]))
+    plt.imshow(np.squeeze(in1[chans,...]))
     if inp2:
         plt.subplot(1,3,3)
-        plt.imshow(np.squeeze(in2[0,...]))
+        plt.imshow(np.squeeze(in2[chans,...]))
     plt.show()
    
 #%%
