@@ -26,7 +26,7 @@ def CenterCropTensor(tgt, x):
     return tgt, x
 
 
-def compare_curves(list_of_names, plot_names = None, individ_Dices = [3]):
+def compare_curves(list_of_names, plot_names = None, individ_Dices = [0,1,2,3,4,5,6]):
     if plot_names==None:
         plot_names = list_of_names
     #read in metrics
