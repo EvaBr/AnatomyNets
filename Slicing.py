@@ -8,19 +8,11 @@ import re
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.ndimage import distance_transform_edt as dt_edt
+from helpers import get_one_hot, flatten_one_hot
 
 
 #%%
 ####################################
-def get_one_hot(gt, nb_class):
-    gt = gt.astype('int')
-    classes = np.eye(nb_class)
-    one_hot = classes[gt]
-    s = np.arange(one_hot.ndim)
-    return np.transpose(one_hot, (s[-1],*s[:-1]))
-
-def flatten_one_hot(one_hot):
-    return np.argmax(one_hot, axis=0)
 
 def check2Dcuts(datafolder, pid, chans=0, inp2=False):
     findit = glob(f"./{datafolder}/*/*/*{pid}.npy")

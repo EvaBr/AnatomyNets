@@ -5,32 +5,21 @@ import pandas as pd
 import Networks
 import torch
 import glob
-from Slicing import flatten_one_hot, get_one_hot
+from helpers import flatten_one_hot, get_one_hot, CenterCropTensor
 import matplotlib.patches as mpatches
 import matplotlib
 import random
 from Losses import DicePerClass, AllDices
 #matplotlib.use('Agg')
 
-def CenterCropTensor(tgt, x):
-    xs2, xs3 = x.shape[-2], x.shape[-1]
-    tg2, tg3 = tgt.shape[-2], tgt.shape[-1]
-    diffY = abs(xs2 - tg2)//2
-    diffX = abs(xs3 - tg3)//2
-    ostanek = abs(xs2-tg2)%2
-    
-    if xs2>tg2: 
-        x = x[..., diffX:xs2-diffX-ostanek, diffY:xs3-diffY-ostanek]
-    else: 
-        tgt = tgt[..., diffX:tg2-diffX-ostanek, diffY:tg3-diffY-ostanek] 
-    return tgt, x
+
 
 
 def compare_curves(list_of_names, plot_names = None, individ_Dices = [0,1,2,3,4,5,6]):
     if plot_names==None:
         plot_names = list_of_names
     #read in metrics
-    metrics = {name: pd.read_csv(f"RESULTS/poem/{name}.csv") for name in list_of_names}
+    metrics = {plotname: pd.read_csv(f"RESULTS/{name}.csv") for plotname,name in zip(plot_names, list_of_names)}
     Dice_names = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
     to_plot = ['Loss'] + [Dice_names[i] for i in individ_Dices]
 
@@ -47,13 +36,17 @@ def compare_curves(list_of_names, plot_names = None, individ_Dices = [0,1,2,3,4,
             plt.legend()
         plt.show()
     
-#%%
+
 #compare_curves(['Third_unet', 'Fourth_unet'])
+
 # %%
 def getchn(args, string):
     cnt = 0
     whichchans = []
     start = [i for i in range(len(args)) if string in args[i]]
+    if len(start)==0: #not given, using default channels 0,1
+        return 2, [0,1]
+
     for i in range(start[0]+1, len(args)):
         if '--' in args[i]:
             break 
@@ -70,7 +63,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     #default settings:
     Arg = {'network': None, 'n_class':7, 'in_channels':2, 'lower_in_channels':2, 'extractor_net':'resnet34'}
     
-    with open(f"RESULTS/poem/{params}_args.txt", "r") as ft:
+    with open(f"RESULTS/{params}_args.txt", "r") as ft:
         args = ft.read().splitlines()
     tmpargs = [i.strip('--').split("=") for i in args if ('--' in i and '=' in i)]
     chan1, whichin1 = getchn(args, 'in_chan')
@@ -85,7 +78,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     net = getattr(Networks, Arg['network'])(Arg['in_channels'], Arg['n_class'], Arg['lower_in_channels'], Arg['extractor_net'])
     net = net.float()
     #now we can load learned params:
-    loaded = torch.load(f"RESULTS/poem/{params}", map_location=lambda storage, loc: storage)
+    loaded = torch.load(f"RESULTS/{params}", map_location=lambda storage, loc: storage)
     net.load_state_dict(loaded['state_dict'])
     
     if doeval:
@@ -106,6 +99,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
         findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
         findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
         findgts.sort(), findin1.sort(), findin2.sort()
+      #  print(findgts)
 
         #all subslices in one image.
         L = len(findgts)
@@ -149,6 +143,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     #for compatibility reasons:
     if ax_tuple.ndim<2:
         ax_tuple = ax_tuple[np.newaxis, ...]
+    plt.suptitle(params)
     for ind in range(len(outs)):  
         #now plot :)
         targetind, outsind = CenterCropTensor(target[ind], outs[ind]) #crop to be more comparable
@@ -183,7 +178,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     plt.show()
     #plt.savefig('foo.png')
     #print(dices)
-    return out, target_oh #take20
+    return take20
 
 
 

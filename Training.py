@@ -8,10 +8,8 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import sys
-import numpy as np
 import os
-from Postprocessing import CenterCropTensor
-from Slicing import flatten_one_hot
+from helpers import CenterCropTensor, flatten_one_hot
 import matplotlib.pyplot as plt 
 
 np.set_printoptions(precision=3, suppress=True)
@@ -172,11 +170,22 @@ def train(args: argparse.Namespace):
             for i in ['Loss', 'Dice']: #train_metrics:
                 val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
             print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, GDL={GDL/numimval}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
+            val_metrics['GDL'][epoch-start_epoch, ...] = GDL/numim
+            val_metrics['GDLbin'][epoch-start_epoch, ...] = GDLbin/numim
 
-            if best_avg_dice<val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean():
+
+            if best_avg_dice<val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean(): #we have new best epoch
                 best_epoch = epoch - start_epoch
                 best_avg_dice = val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean()
                 print(f"> Best epoch so far: {best_epoch}")
+                #for better eval, let's save the current net, and information about the best epoch:
+                with open(f'RESULTS/{args.save_as}_bestepoch.txt', 'a') as f:
+                    f.write(str(best_epoch))
+                
+                torch.save({'epoch': best_epoch,
+                            'state_dict': model.state_dict(),
+                            'optimizer': optimizer.state_dict()}, f'RESULTS/{args.save_as}_bestepoch')
+
         #Let's empty cache after each epoch just in case that helps memory issues... 
         #torch.cuda.empty_cache()
         if args.schedule and (epoch+1 % (best_epoch + 10) == 0):  
@@ -211,8 +220,10 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--schedule", action="store_true")
 
-   # sys.argv = ['Training.py', '--dataset=POEM', '--batch_size=8', '--network=UNet', '--n_epoch=15', '--l_rate=1e-3',
-   #             "--losses=[('CrossEntropy', {'idc': [0,1,2,3,4,5,6]}, 1)]", "--save_as=unet_mtl_ce", '--debug']
+   # sys.argv = ['Training.py', '--dataset=POEM80_dts', '--batch_size=32', '--network=UNet', '--n_epoch=100', '--l_rate=1e-3',
+   #            "--in_channels 0 1 2 4 5", "--lower_in_channels 0 1 2 4 5", "--save_as=unet_dts", '--debug',
+   #             "--losses=[('WeightedGeneralizedDice', {'idc': [0.1, 0.5, 0.4, 0.35, 0.5, 0.4, 0.4]}, 1), ('WeightedCrossEntropy', {'idc': [0.1, 1, 1, 1, 1, 1, 1]}, 1)]" ]
+
 
     args = parser.parse_args()
     print(args)
@@ -223,3 +234,4 @@ if __name__ == '__Training__':
     train(get_args())
 
 train(get_args())
+
