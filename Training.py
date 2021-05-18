@@ -170,8 +170,8 @@ def train(args: argparse.Namespace):
             for i in ['Loss', 'Dice']: #train_metrics:
                 val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
             print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, GDL={GDL/numimval}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
-            val_metrics['GDL'][epoch-start_epoch, ...] = GDL/numim
-            val_metrics['GDLbin'][epoch-start_epoch, ...] = GDLbin/numim
+            val_metrics['val_GDL'][epoch-start_epoch, ...] = GDL/numim
+            val_metrics['val_GDLbin'][epoch-start_epoch, ...] = GDLbin/numim
 
 
             if best_avg_dice<val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean(): #we have new best epoch

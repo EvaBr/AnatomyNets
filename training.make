@@ -4,8 +4,8 @@ SHELL = /usr/bin/zsh
 EPC = 100
 
 
-DATA = --dataset='POEM80_dt'
-DATA2 = --dataset='POEM80_dts2'
+DATA = --dataset='POEM25_dts'
+#DATA2 = --dataset='POEM25_dts2'
 
 TRN1 = RESULTS/poem/unet RESULTS/poem/deepmed RESULTS/poem/pnet 
 TRN2 = RESULTS/poem/unet_dts RESULTS/poem/deepmed_dts RESULTS/poem/pnet_dts
@@ -50,7 +50,7 @@ all: $(TRN1) $(TRN2)
 $(TRN1):
 	mkdir -p $@_tmp
 	$(CC) $(CFLAGS) Training.py --batch_size=32 --l_rate=1e-3 \
-		--n_epoch=$(EPC) --in_channels 0 1 --lower_in_channels 0 1 $(OPT) $(DATA2)
+		--n_epoch=$(EPC) --in_channels 0 1 --lower_in_channels 0 1 $(OPT) $(DATA)
 	mv $@_tmp $@ 
 	mv RESULTS/$(SV)* $@/.
 	
@@ -58,7 +58,7 @@ $(TRN1):
 $(TRN2):
 	mkdir -p $@_tmp
 	$(CC) $(CFLAGS) Training.py --batch_size=32 --l_rate=1e-3 \
-		--n_epoch=$(EPC) --in_channels 0 1 2 4 5 --lower_in_channels 0 1 2 4 5 $(OPT) $(DATA2)
+		--n_epoch=$(EPC) --in_channels 0 1 2 4 5 --lower_in_channels 0 1 2 4 5 $(OPT) $(DATA)
 	mv $@_tmp $@ 
 	mv RESULTS/$(SV)* $@/.
 

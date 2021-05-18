@@ -139,7 +139,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
   #  print((out.shape, target_oh.shape))
     outs = [flatten_one_hot(o.detach().squeeze().numpy()) for o in out] 
     
-    fig, ax_tuple = plt.subplots(nrows=allL, ncols=2, figsize = (10, allL*6), tight_layout = True)
+    fig, ax_tuple = plt.subplots(nrows=allL, ncols=2, figsize = (10, allL*6+1), tight_layout = True)
     #for compatibility reasons:
     if ax_tuple.ndim<2:
         ax_tuple = ax_tuple[np.newaxis, ...]
