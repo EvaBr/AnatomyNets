@@ -8,7 +8,7 @@ def get_one_hot(gt, nb_class):
     s = np.arange(one_hot.ndim)
     return np.transpose(one_hot, (s[-1],*s[:-1]))
 
-def flatten_one_hot(one_hot):
+def flatten_one_hot(one_hot): #OBS no batch !
     return np.argmax(one_hot, axis=0)
 
 def CenterCropTensor(tgt, x):
