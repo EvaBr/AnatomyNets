@@ -25,17 +25,26 @@ def check2Dcuts(datafolder, pid, chans=0, inp2=False):
     vseh = 2 + 1*inp2
     plt.figure(figsize=(20,7))
     plt.subplot(1,vseh,1)
-    plt.imshow(gt)
+    plt.imshow(gt, vmin=0, vmax=7)
+    plt.axis('off')
     plt.subplot(1,vseh,2)
     plt.imshow(np.squeeze(in1[chans,...]))
+    plt.axis('off')
     if inp2:
         plt.subplot(1,vseh,3)
         plt.imshow(np.squeeze(in2[chans,...]))
+        plt.axis('off')
     plt.show()
 
 
 def check3Dcuts(datafolder, pid, chans=0, inp2=False):
-    findit = glob(f"./{datafolder}/*/*/*{pid}.npy")
+    if isinstance(pid, str) and pid[-4:]!='.npy':
+        pid = list(set(p.name for p in pathlib.Path(datafolder).glob(f"**/*{pid}*")))
+    if isinstance(pid, list):
+        for p in pid:
+            check3Dcuts(datafolder, p, chans=chans, inp2=inp2)
+        return None
+    findit = glob(f"./{datafolder}/*/*/*{pid}*")
     findit.sort()
     in1 = np.load(findit[1])
     if inp2:
@@ -48,28 +57,37 @@ def check3Dcuts(datafolder, pid, chans=0, inp2=False):
     #plot GT slices
     plt.subplot(vsehrows,3,1)
     plt.title('gt')
-    plt.imshow(gt[midx//2,...])
+    plt.imshow(gt[midx//2,...], vmin=0, vmax=7)
+    plt.axis('off')
     plt.subplot(vsehrows,3,2)
-    plt.imshow(gt[:,midy//2,...])
+    plt.imshow(gt[:,midy//2,...], vmin=0, vmax=7)
+    plt.axis('off')
     plt.subplot(vsehrows,3,3)
-    plt.imshow(gt[..., midz//2])
+    plt.imshow(gt[..., midz//2], vmin=0, vmax=7)
+    plt.axis('off')
     #plt input
     plt.subplot(vsehrows,3,4)
     plt.title('in1')
     plt.imshow(np.squeeze(in1[chans,midx//2,...]))
+    plt.axis('off')
     plt.subplot(vsehrows,3,5)
     plt.imshow(np.squeeze(in1[chans,:,midy//2,:]))
+    plt.axis('off')
     plt.subplot(vsehrows,3,6)
     plt.imshow(np.squeeze(in1[chans,...,midz//2]))
+    plt.axis('off')
 
     if inp2:
         plt.subplot(3,3,7)
         plt.title('in2')
         plt.imshow(np.squeeze(in2[chans,midx//2,...]))
+        plt.axis('off')
         plt.subplot(3,3,8)
         plt.imshow(np.squeeze(in2[chans,:,midy//2,...]))
+        plt.axis('off')
         plt.subplot(3,3,9)
         plt.imshow(np.squeeze(in2[chans,..., midz//2]))
+        plt.axis('off')
     plt.show()
    
 
@@ -268,7 +286,7 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
         inx = wat.shape[0]//patch_size
         iny = wat.shape[1]//patch_size
         inz = wat.shape[2]//patch_size
-        to_cut = 10 
+        to_cut = 5 
 
 
         if sampling==None:
@@ -276,7 +294,7 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
            # print((maska.shape, wat.shape))
             kjeso = np.argwhere(maska==1)
             if len(kjeso)>to_cut:
-                kjeso = random.sample(kjeso, to_cut)
+                kjeso = kjeso[np.random.choice(kjeso.shape[0], to_cut, replace=False), ...]
 
         else: 
             assert len(sampling)==nb_class, f"Sampling variable should be an array of length 7!"
@@ -286,7 +304,8 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
                 possible = np.argwhere( (gt[organ, ...]*maska) == 1)
                 Ll = len(possible)
                 nr_sample = min(nr_samples, Ll)
-                kjeso.append(random.sample(possible, nr_sample))
+                kjeso.append(possible[random.sample(range(Ll), nr_sample),...])
+            kjeso = np.vstack(kjeso)
                 
                 
                

@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import sys
 import os
-from helpers import CenterCropTensor, flatten_one_hot
+from helpers import CenterCropTensor, CenterCropTensor3d, flatten_one_hot
 import matplotlib.pyplot as plt 
 
 np.set_printoptions(precision=3, suppress=True)
@@ -89,6 +89,7 @@ def train(args: argparse.Namespace):
     
     numim = len(train_loader.dataset)
     numimval = len(val_loader.dataset)
+    TensorCenterCropping = CenterCropTensor #assume 2d from the beginning
     for epoch in range(start_epoch, args.n_epoch+start_epoch):
         #train
         model.train()
@@ -104,10 +105,14 @@ def train(args: argparse.Namespace):
             data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
          #   print([i.shape for i in data])
             out = model(*data)
+
+            is3d = out.ndim==5  # b x c x hxw(xd)
+            if is3d:
+                TensorCenterCropping = CenterCropTensor3d
             
          #   print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
-            target, out = CenterCropTensor(target, out)
+            target, out = TensorCenterCropping(target, out)
             loss = loss_fn(out, target)
 
             loss.backward()
@@ -125,11 +130,15 @@ def train(args: argparse.Namespace):
            
         if args.debug and epoch%5==0:
             plt.figure()
-            for elem in range(1, args.batch_size+1):
+            elstr = "...]"
+            if is3d:
+                elstr = f"{target.shape[-2]//2},...]"
+
+            for elem in range(1, args.batch_size+1):  #in case of 3d data, only plot middle slice
                 plt.subplot(args.batch_size,2,2*elem-1)
-                plt.imshow(flatten_one_hot(target[elem-1,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
+                plt.imshow(flatten_one_hot(eval("target[elem-1,"+elstr+".detach().squeeze().cpu().numpy()")),  cmap='Spectral', vmin=0,vmax=7)
                 plt.subplot(args.batch_size,2,2*elem)
-                plt.imshow(flatten_one_hot(out[elem-1,...].detach().squeeze().cpu().numpy()),  cmap='Spectral', vmin=0,vmax=7)
+                plt.imshow(flatten_one_hot(eval("out[elem-1,"+elstr+".detach().squeeze().cpu().numpy()")),  cmap='Spectral', vmin=0,vmax=7)
             plt.show()
 
         
@@ -153,7 +162,7 @@ def train(args: argparse.Namespace):
                 data, target = [i.to(device) for i in data_tuple[:-1]], data_tuple[-1].to(device)
 
                 out = model(*data)
-                target, out = CenterCropTensor(target, out)
+                target, out = TensorCenterCropping(target, out)
                 loss = loss_fn(out, target)
                 dice = DicePerClassBinary(out.detach(), target.detach())
                 GDL += batchGDL(out.detach(), target.detach()).sum()

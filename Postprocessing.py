@@ -5,7 +5,7 @@ import pandas as pd
 import Networks
 import torch
 import glob
-from helpers import flatten_one_hot, get_one_hot, CenterCropTensor
+from helpers import flatten_one_hot, get_one_hot, CenterCropTensor, CenterCropTensor3d
 import matplotlib.patches as mpatches
 import matplotlib
 import random
@@ -122,7 +122,14 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     if len(organs)!=Arg['n_class']: #in case not POEM dataset used
         organs = [str(zblj) for zblj in range(Arg['n_class'])]
 
-    tgtonehot = np.load(allfindgts[0]).ndim>2 #are targets one hot encoded?
+    entmptgt = np.load(allfindgts[0])
+    tgtonehot = entmptgt.shape[0]==7 #are targets one hot encoded?
+    in3d = tgtonehot*(entmpgt.ndim==4) + (not tgtonehot)*(entmpgt.ndim==3)
+    if in3d:
+        #set the right function to use
+        TensorCroping = CenterCropTensor3d
+    else:
+        TensorCroping = CenterCropTensor
 
     data = torch.stack([torch.from_numpy(np.load(i1)).float().to(device) for i1 in allfindin1], dim=0)
     data = [data[:, whichin1, ...]]
@@ -134,7 +141,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
         data.append(in2[:, whichin2, ...])
     
     out = net(*data)
-    target_oh, out = CenterCropTensor(target_oh, out)
+    target_oh, out = TensorCropping(target_oh, out)
     dices = AllDices(out, target_oh) #DicePerClass(out, target_oh)
   #  print((out.shape, target_oh.shape))
     outs = [flatten_one_hot(o.detach().squeeze().numpy()) for o in out] 
@@ -146,8 +153,11 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     plt.suptitle(params)
     for ind in range(len(outs)):  
         #now plot :)
-        targetind, outsind = CenterCropTensor(target[ind], outs[ind]) #crop to be more comparable
+        targetind, outsind = TensorCropping(target[ind], outs[ind]) #crop to be more comparable
       #  print((outsind.shape, targetind.shape))
+        if in3d:
+            sl = targetind.shape[-2]//2
+            targetind, outsind = targetind[...,sl,:], outsind[...,sl,:]
 
         ax1 = ax_tuple[ind, 0]
         ax1.set_title('GT')
@@ -172,8 +182,6 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
         t = ax2.text(1.08, 0.5, 'Dices:', size='medium', horizontalalignment='center', verticalalignment='center', transform=ax2.transAxes)
         for d in range(7): 
             t = ax2.text(1.1, 0.45-d*0.05, f"{organs[d]}: {dajci[d]:.3f}", size='small', transform=ax2.transAxes)
-
-
 
     plt.show()
     #plt.savefig('foo.png')

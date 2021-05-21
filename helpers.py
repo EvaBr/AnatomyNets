@@ -23,3 +23,22 @@ def CenterCropTensor(tgt, x):
     else: 
         tgt = tgt[..., diffX:tg2-diffX-ostanek, diffY:tg3-diffY-ostanek] 
     return tgt, x
+
+def CenterCropTensor3d(tgt, x):
+    xs1, xs2, xs3 = x.shape[-1], x.shape[-2], x.shape[-3]
+    tg1, tg2, tg3 = tgt.shape[-1], tgt.shape[-2], tgt.shape[-3]
+    diffZ = abs(xs1 - tg1)//2
+    diffY = abs(xs2 - tg2)//2
+    diffX = abs(xs3 - tg3)//2
+    ostanekz = abs(xs1-tg1)%2
+    ostaneky = abs(xs2-tg2)%2
+    ostanekx = abs(xs3-tg3)%2
+    
+    if xs2>tg2:
+        #we assume that either tgt or x is larger in ALL dimensions (cant be mixed)
+        x = x[..., diffX:xs3-diffX-ostanekx, diffY:xs2-diffY-ostaneky,  diffZ:xs1-diffX-ostanekz]
+    else: 
+        tgt = tgt[..., diffX:tg3-diffX-ostanekx, diffY:tg2-diffY-ostaneky, diffZ:tg1-diffZ-ostanekz]
+        
+    return tgt, x
+
