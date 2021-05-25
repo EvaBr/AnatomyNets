@@ -6,6 +6,7 @@ from torch.utils import model_zoo
 from collections import OrderedDict
 import torch.nn.functional as F
 import Extractors
+import Extractors3D
 import math
 
 model_urls = {
@@ -19,19 +20,28 @@ model_urls = {
 
 #block of 2 conv layers
 class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels, mid_channels=None, kernel_size=3, stride=1, dilation=1, padding=1):
+    def __init__(self, in_channels, out_channels, TriD=False,  mid_channels=None, kernel_size=3, stride=1, dilation=1, padding=1):
         super(DoubleConv, self).__init__()
 
         if mid_channels==None:
             mid_channels = out_channels
 
-        self.block = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
-            nn.BatchNorm2d(out_channels, track_running_stats=False),
-            nn.PReLU(), #(P)relu?
-            nn.Conv2d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
-            nn.BatchNorm2d(out_channels, track_running_stats=False),
-        )
+        if TriD:
+            self.block = nn.Sequential(
+                nn.Conv3d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
+                nn.BatchNorm3d(out_channels, track_running_stats=False),
+                nn.PReLU(), #(P)relu?
+                nn.Conv3d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
+                nn.BatchNorm3d(out_channels, track_running_stats=False),
+            )
+        else:
+            self.block = nn.Sequential(
+                nn.Conv2d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
+                nn.BatchNorm2d(out_channels, track_running_stats=False),
+                nn.PReLU(), #(P)relu?
+                nn.Conv2d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
+                nn.BatchNorm2d(out_channels, track_running_stats=False),
+            )
         self.act = nn.PReLU()
     
     def forward(self, x):
@@ -39,13 +49,13 @@ class DoubleConv(nn.Module):
         return self.act(x)
 
 
-#2D UNET
+#2D & 3D UNET
 class DownBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, TriD=False):
         super(DownBlock, self).__init__()
         
-        self.block = DoubleConv(in_channels, out_channels)
-        self.downblock =  nn.MaxPool2d(2) #nn.Sequential(
+        self.block = DoubleConv(in_channels, out_channels, TriD=TriD)
+        self.downblock =  eval(f"nn.MaxPool{2+1*TriD}d(2)") #nn.Sequential(
          #   nn.MaxPool2d(2),
          #   nn.Dropout(0.5) #dropout to less, or make optional?
         #)
@@ -55,26 +65,31 @@ class DownBlock(nn.Module):
         return self.block(x)
 
 class UpBlock(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, TriD=False):
         super(UpBlock, self).__init__()
         out_chan = in_channels//2
+        self.TriD = TriD
        # self.upsamp = nn.ConvTranspose2d(in_channels, out_chan, kernel_size=2, stride=2) #gives checkerboard artefacts
         self.upsamp = nn.Sequential(
             nn.Upsample(scale_factor=2),
-            DoubleConv(in_channels, out_chan)
+            DoubleConv(in_channels, out_chan, TriD=TriD)
   #          nn.Conv2d(in_channels, out_chan, kernel_size=3, padding=1) #size issues when using 2x2 as in paper
         )
-        self.block = DoubleConv(in_channels, out_chan)
+        self.block = DoubleConv(in_channels, out_chan, TriD=TriD)
 
 
     def forward(self, x, x_skip):
         x = self.upsamp(x)
 
+        #x.size = b x c x h x w (x d)
         diffY = x_skip.size()[2] - x.size()[2]
         diffX = x_skip.size()[3] - x.size()[3]
+        cropping = [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2]
+        if self.TriD:
+            diffZ = x_skip.size()[4] - x.size()[4]
+            cropping += [diffZ // 2, diffZ - diffZ //2] 
 
-        x = F.pad(x, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
+        x = F.pad(x, cropping)
         #x_skip = tsf.CenterCrop((h,w))(x_skip)
         x = torch.cat([x_skip, x], dim=1)
         return self.block(x)
@@ -84,25 +99,31 @@ class UpBlock(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels, n_classes, dummy=None, dummyNet=None):
+    def __init__(self, in_channels, n_classes, dummy=None, dummyNet=None, TriD=False):
         super(UNet, self).__init__()
 
         self.n_class = n_classes
         self.n_chan = in_channels
 
-        self.firsttwo = DoubleConv(in_channels, 64)
-        self.down1 = DownBlock(64, 128)
-        self.down2 = DownBlock(128, 256)
-        self.down3 = DownBlock(256, 512)
-      #  self.down4 = DownBlock(512, 1024)
-      #  self.up4 = UpBlock(1024)
-        self.up3 = UpBlock(512)
-        self.up2 = UpBlock(256)
-        self.up1 = UpBlock(128)
-        self.final = nn.Sequential(
-            nn.Conv2d(64, n_classes, kernel_size=1),
-            nn.LogSoftmax(dim=1)
-        )
+        self.firsttwo = DoubleConv(in_channels, 64, TriD=TriD)
+        self.down1 = DownBlock(64, 128, TriD=TriD)
+        self.down2 = DownBlock(128, 256, TriD=TriD)
+        self.down3 = DownBlock(256, 512, TriD=TriD)
+      #  self.down4 = DownBlock(512, 1024, TriD=TriD)
+      #  self.up4 = UpBlock(1024, TriD=TriD)
+        self.up3 = UpBlock(512, TriD=TriD)
+        self.up2 = UpBlock(256, TriD=TriD)
+        self.up1 = UpBlock(128, TriD=TriD)
+        if TriD:
+            self.final = nn.Sequential(
+                nn.Conv3d(64, n_classes, kernel_size=1),
+                nn.LogSoftmax(dim=1)
+            )
+        else:
+            self.final = nn.Sequential(
+                nn.Conv2d(64, n_classes, kernel_size=1),
+                nn.LogSoftmax(dim=1)
+            )
 
     def forward(self, x_in):
         x1 = self.firsttwo(x_in)
@@ -116,7 +137,8 @@ class UNet(nn.Module):
         x = self.up1(x, x1)
         return self.final(x)
 
-#HOEL'S UNET
+
+#HOEL'S UNET -> ONLY FOR 2D!!
 def convBatch(nin, nout, kernel_size=3, stride=1, padding=1, bias=False, layer=nn.Conv2d, dilation=1):
     return nn.Sequential(
         layer(nin, nout, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias, dilation=dilation),
@@ -198,14 +220,14 @@ class UNet2(nn.Module):
 
 
 
-#2D DeepMedic
+#2D & 3D DeepMedic
 class Pathway(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, in_channels, TriD=False):
         super(Pathway, self).__init__()
-        self.block1 = DoubleConv(in_channels, 30, padding=0)
-        self.block2 = DoubleConv(30, 40, padding=0)
-        self.block3 = DoubleConv(40, 40, padding=0)
-        self.block4 = DoubleConv(40, 50, padding=0)
+        self.block1 = DoubleConv(in_channels, 30, TriD=TriD, padding=0)
+        self.block2 = DoubleConv(30, 40, TriD=TriD, padding=0)
+        self.block3 = DoubleConv(40, 40, TriD=TriD, padding=0)
+        self.block4 = DoubleConv(40, 50, TriD=TriD, padding=0)
 
     def forward(self, x):
         x = self.block1(x)
@@ -215,19 +237,20 @@ class Pathway(nn.Module):
 
 
 class DeepMedic(nn.Module):
-    def __init__(self, in_channels_upper, n_classes, in_channels_lower, dummy=None):
+    def __init__(self, in_channels_upper, n_classes, in_channels_lower, dummy=None, TriD=False):
         super(DeepMedic, self).__init__()
         self.in_channels_u = in_channels_upper
         self.n_classes = n_classes
         self.in_channels_l = in_channels_lower
+        self.TriD = TriD
 
-        self.upperPath = Pathway(in_channels_upper)
-        self.lowerPath = Pathway(in_channels_lower)
+        self.upperPath = Pathway(in_channels_upper, TriD=TriD)
+        self.lowerPath = Pathway(in_channels_lower, TriD=TriD)
 
         #self.upsample = nn.ConvTranspose2d(50, 50, kernel_size=2, stride=2)
         self.final = nn.Sequential(
-            DoubleConv(100, 150, kernel_size=1, padding=0),
-            nn.Conv2d(150, n_classes, kernel_size=1),
+            DoubleConv(100, 150, kernel_size=1, padding=0, TriD=TriD),
+            nn.Conv3d(150, n_classes, kernel_size=1) if TriD else nn.Conv2d(150, n_classes, kernel_size=1),
             nn.LogSoftmax(dim=1)
         )
 
@@ -235,99 +258,129 @@ class DeepMedic(nn.Module):
         x_u = self.upperPath(x_upper)
         x_l = self.lowerPath(x_lower)
         h, w = x_u.size(2), x_u.size(3)
+        if self.TriD: 
+            d = x_u.size(4)
+            x_l = nn.functional.interpolate(x_l, size=(h,w,d), mode='nearest') #???dela le na 2D?
         #x_l = self.upsample(x_l) #could we use transpConv instead of simple upsampling??
-        x_l = nn.functional.interpolate(x_l, size=(h,w), mode='nearest') #size=x_u.shape
+        else:
+            x_l = nn.functional.interpolate(x_l, size=(h,w), mode='nearest') #size=x_u.shape
+    
         x = torch.cat([x_u, x_l], dim=1)
         return self.final(x)
 
 
-#PSP-Net
+#2D & 3D PSP-Net
 class PyramidPooling(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, TriD=False):
         super(PyramidPooling, self).__init__()
 
         self.channels_per_pool = in_channels//4
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.TriD = TriD
 
-        self.level1 = self.get_level(1)
-        self.level2 = self.get_level(2)
-        self.level3 = self.get_level(3)
-        self.level4 = self.get_level(6)
+        self.level1 = self.get_level(1, TriD)
+        self.level2 = self.get_level(2, TriD)
+        self.level3 = self.get_level(3, TriD)
+        self.level4 = self.get_level(6, TriD)
 
         self.final = nn.Sequential(
-            nn.Conv2d(self.in_channels+self.channels_per_pool*4, self.out_channels, kernel_size=1),
+            eval(f"nn.Conv{2+1*TriD}d(self.in_channels+self.channels_per_pool*4, self.out_channels, kernel_size=1)",
             nn.ReLU()
         )
     
-    def get_level(self, size):
-        level = nn.Sequential(
-            nn.AdaptiveAvgPool2d((size, size)),
-            nn.Conv2d(self.in_channels, self.channels_per_pool, kernel_size=1, bias=False)
-        )
+    def get_level(self, size, TriD):
+        if TriD:
+            level = nn.Sequential(
+                nn.AdaptiveAvgPool3d((size, size, size)),
+                nn.Conv3d(self.in_channels, self.channels_per_pool, kernel_size=1, bias=False)
+            )
+        else:
+            level = nn.Sequential(
+                nn.AdaptiveAvgPool2d((size, size)),
+                nn.Conv2d(self.in_channels, self.channels_per_pool, kernel_size=1, bias=False)
+            )
         return level
     
     def forward(self, x):
         h, w = x.size(2), x.size(3)
-        x1 = nn.functional.upsample(self.level1(x),  size=(h, w), mode='bilinear')
-        x2 = nn.functional.upsample(self.level2(x),  size=(h, w), mode='bilinear')
-        x3 = nn.functional.upsample(self.level3(x),  size=(h, w), mode='bilinear')
-        x4 = nn.functional.upsample(self.level4(x),  size=(h, w), mode='bilinear')
+        if self.TriD:
+            d = x.size(4)
+            sajz = (h, w, d)
+        else:
+            sajz = (h, w)
+        x1 = nn.functional.upsample(self.level1(x),  size=sajz, mode='bilinear')
+        x2 = nn.functional.upsample(self.level2(x),  size=sajz, mode='bilinear')
+        x3 = nn.functional.upsample(self.level3(x),  size=sajz, mode='bilinear')
+        x4 = nn.functional.upsample(self.level4(x),  size=sajz, mode='bilinear')
         x = torch.cat([x,x4, x3, x2, x1], dim=1)
         return self.final(x)
 
 
 class UpsamplingConv(nn.Module):
-    def __init__(self, in_channels, out_channels, factor=2):
+    def __init__(self, in_channels, out_channels, factor=2, TriD=False):
         super(UpsamplingConv, self).__init__()
 
         self.f = factor
+        self.TriD = TriD
         self.block = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
+            nn.PReLU()
+        ) if not TriD else nn.Sequential(
+            nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm3d(out_channels),
             nn.PReLU()
         )
 
     def forward(self, x):
         h, w = self.f*x.size(2), self.f*x.size(3)
-        x = nn.functional.upsample(input=x, size=(h, w), mode='bilinear') #should we try with learning instead? ie with TransposeConv?
+        if self.TriD:
+            d = self.f*x.size(4)
+            sajz = (h, w, d)
+        else: 
+            sajz = (h, w)
+        x = nn.functional.upsample(input=x, size=sajz, mode='bilinear') #should we try with learning instead? ie with TransposeConv?
         return self.block(x)
 
 
 
 class PSPNet(nn.Module):
-    def __init__(self, in_channels, n_classes, dummy=None, extractor_net='resnet34'):
+    def __init__(self, in_channels, n_classes, dummy=None, extractor_net='resnet34', TriD=False):
         super(PSPNet, self).__init__()
 
+        self.TriD = TriD
         self.in_channels = in_channels #the in_channels of the img! 
         #here the in_channels are the expected nr of channels of an image.... RESNET has 3 by default! 
         # so we need to add additional layer before resnet, to get to appropriate nr of channels... [any better ideas???]
-        self.prelayer = nn.Conv2d(self.in_channels, 3, kernel_size=1) #try also kernelSize=3?
+        self.prelayer = nn.Conv3d(self.in_channels, 3, kernel_size=1) if TriD else nn.Conv2d(self.in_channels, 3, kernel_size=1)#try also kernelSize=3?
 
         self.n_classes = n_classes
-        self.get_features = self.get_pretrained(extractor_net)
+        self.get_features = self.get_pretrained(extractor_net, TriD)
 
         #the in_channels from the extractor net into PSP part:
         in_from_extractor = 512
         if extractor_net=='resnet101':
             in_from_extractor = 2048
-        self.PSPmodule = PyramidPooling(in_from_extractor, 1024)
-        self.PSPdrop = nn.Dropout2d(p=0.3)
+        self.PSPmodule = PyramidPooling(in_from_extractor, 1024, TriD=TriD)
+        self.PSPdrop = nn.Dropout3d(p=0.3) if TriD else nn.Dropout2d(p=0.3)
         self.to_orig_size = nn.Sequential(
-            UpsamplingConv(1024, 512),
-            nn.Dropout2d(p=0.15),
-            UpsamplingConv(512, 128),
-            nn.Dropout2d(p=0.15),
-            UpsamplingConv(128, 64),
-            nn.Dropout2d(p=0.15)   #do we need all these dropouts?
+            UpsamplingConv(1024, 512, TriD=TriD),
+            nn.Dropout2d(p=0.15) if not TriD else nn.Dropout3d(p=0.15),
+            UpsamplingConv(512, 128, TriD=TriD),
+            nn.Dropout2d(p=0.15) if not TriD else nn.Dropout3d(p=0.15),
+            UpsamplingConv(128, 64, TriD=TriD),
+            nn.Dropout2d(p=0.15) if not TriD else nn.Dropout3d(p=0.15)  #do we need all these dropouts?
         )
         self.final = nn.Sequential( 
-            nn.Conv2d(64, n_classes, kernel_size=1),
+            nn.Conv2d(64, n_classes, kernel_size=1) if not TriD else nn.Conv3d(64, n_classes, kernel_size=1),
             nn.LogSoftmax(dim=1)
         )
 
-    def get_pretrained(self, network, pretrained=True):
-        return getattr(Extractors, network)(pretrained) # globals()[network](pretrained)
+    def get_pretrained(self, network, pretrained=True, TriD=False):
+        if not TriD:
+            return getattr(Extractors, network)(pretrained) # globals()[network](pretrained)
+        return getattr(Extractors3D, network)(pretrained)
         
     def forward(self, x):
         x = self.prelayer(x)
