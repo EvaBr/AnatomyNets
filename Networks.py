@@ -99,7 +99,7 @@ class UpBlock(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels, n_classes, dummy=None, dummyNet=None, TriD=False):
+    def __init__(self, in_channels, n_classes, in_channels_lower=None, extractor_net=None, TriD=False):
         super(UNet, self).__init__()
 
         self.n_class = n_classes
@@ -174,7 +174,7 @@ class residualConv(nn.Module):
 
 
 class UNet2(nn.Module):
-    def __init__(self, nin, nout, dummy=None, dummy2=None, nG=64):
+    def __init__(self, nin, nout, in_channels_lower=None, extractor_net=None, TriD=False, nG=64):
         super().__init__()
 
         self.conv0 = nn.Sequential(convBatch(nin, nG),
@@ -237,7 +237,7 @@ class Pathway(nn.Module):
 
 
 class DeepMedic(nn.Module):
-    def __init__(self, in_channels_upper, n_classes, in_channels_lower, dummy=None, TriD=False):
+    def __init__(self, in_channels_upper, n_classes, in_channels_lower, extractor_net=None, TriD=False):
         super(DeepMedic, self).__init__()
         self.in_channels_u = in_channels_upper
         self.n_classes = n_classes
@@ -285,7 +285,7 @@ class PyramidPooling(nn.Module):
         self.level4 = self.get_level(6, TriD)
 
         self.final = nn.Sequential(
-            eval(f"nn.Conv{2+1*TriD}d(self.in_channels+self.channels_per_pool*4, self.out_channels, kernel_size=1)",
+            eval(f"nn.Conv{2+1*TriD}d(self.in_channels+self.channels_per_pool*4, self.out_channels, kernel_size=1)"),
             nn.ReLU()
         )
     
@@ -307,12 +307,14 @@ class PyramidPooling(nn.Module):
         if self.TriD:
             d = x.size(4)
             sajz = (h, w, d)
+            moud = 'trilinear'
         else:
             sajz = (h, w)
-        x1 = nn.functional.upsample(self.level1(x),  size=sajz, mode='bilinear')
-        x2 = nn.functional.upsample(self.level2(x),  size=sajz, mode='bilinear')
-        x3 = nn.functional.upsample(self.level3(x),  size=sajz, mode='bilinear')
-        x4 = nn.functional.upsample(self.level4(x),  size=sajz, mode='bilinear')
+            moud = 'bilinear'
+        x1 = nn.functional.upsample(self.level1(x),  size=sajz, mode=moud)
+        x2 = nn.functional.upsample(self.level2(x),  size=sajz, mode=moud)
+        x3 = nn.functional.upsample(self.level3(x),  size=sajz, mode=moud)
+        x4 = nn.functional.upsample(self.level4(x),  size=sajz, mode=moud)
         x = torch.cat([x,x4, x3, x2, x1], dim=1)
         return self.final(x)
 
@@ -338,15 +340,17 @@ class UpsamplingConv(nn.Module):
         if self.TriD:
             d = self.f*x.size(4)
             sajz = (h, w, d)
+            moud = 'trilinear'
         else: 
             sajz = (h, w)
-        x = nn.functional.upsample(input=x, size=sajz, mode='bilinear') #should we try with learning instead? ie with TransposeConv?
+            moud = 'bilinear'
+        x = nn.functional.upsample(input=x, size=sajz, mode=moud) #should we try with learning instead? ie with TransposeConv?
         return self.block(x)
 
 
 
 class PSPNet(nn.Module):
-    def __init__(self, in_channels, n_classes, dummy=None, extractor_net='resnet34', TriD=False):
+    def __init__(self, in_channels, n_classes, in_channels_lower=None, extractor_net='resnet34', TriD=False):
         super(PSPNet, self).__init__()
 
         self.TriD = TriD
@@ -356,7 +360,7 @@ class PSPNet(nn.Module):
         self.prelayer = nn.Conv3d(self.in_channels, 3, kernel_size=1) if TriD else nn.Conv2d(self.in_channels, 3, kernel_size=1)#try also kernelSize=3?
 
         self.n_classes = n_classes
-        self.get_features = self.get_pretrained(extractor_net, TriD)
+        self.get_features = self.get_pretrained(extractor_net, TriD=TriD) #for now we only use pretrained versions
 
         #the in_channels from the extractor net into PSP part:
         in_from_extractor = 512
@@ -384,8 +388,9 @@ class PSPNet(nn.Module):
         
     def forward(self, x):
         x = self.prelayer(x)
-        feats, for_deep_loss = self.get_features(x) #here we assume the output size will be 1/8 of original img size
-        #for now we don't use the auxiliary loss to improve training. so ignore for_deep_loss. 
+        feats = self.get_features(x) #here we assume the output size will be 1/8 of original img size
+        #feats, for_deep_loss = ....
+        #for now we don't use the auxiliary loss to improve training. so ignore for_deep_loss. Plus. Not available anyway in 3D atm
         x = self.PSPmodule(feats)
         x = self.PSPdrop(x)
         x = self.to_orig_size(x)

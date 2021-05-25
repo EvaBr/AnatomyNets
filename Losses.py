@@ -5,12 +5,13 @@ from operator import add
 from typing import List, cast
 
 class MultiTaskLoss():
-    def __init__(self, lossdict, device, trainable=False):
+    def __init__(self, lossdict, device, in3d=False, trainable=False):
         losses = eval(lossdict)
         loss_fns: List[Callable] = []
         loss_ws: List[float] = []
         for loss_name, loss_params, weight in losses:
             loss_params['device'] = device
+            loss_params['in3d'] = in3d
             loss_fns.append(globals()[loss_name](**loss_params))
             loss_ws.append(weight)
 
@@ -28,12 +29,16 @@ class MultiTaskLoss():
 class CrossEntropy():
     def __init__(self, **kwargs):
         self.idc: List[int] = kwargs["idc"]
+        self.is3d = kwargs["in3d"]
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
         log_p: Tensor = probs[:, self.idc, ...] #+ 1e-10).log()
         mask: Tensor = target[:, self.idc, ...].type(torch.float32)
 
-        loss = - einsum("bc...,bc...->", mask, log_p)
+        if self.is3d:
+            loss = - einsum("bchwd,bchwd->", mask, log_p)
+        else:
+            loss = - einsum("bchw,bchw->", mask, log_p)
         loss /= max(mask.sum(), 1e-10) #mask.sum() + 1e-10
         return loss
 
@@ -44,17 +49,20 @@ class WeightedCrossEntropy():
         #If a class should be ignored, simply set weight=0 for that class.
         device = kwargs["device"]
         self.weights = torch.tensor([i for i in idc if i>0]).float().to(device)
+        self.is3d = kwargs["in3d"]
+        self.str = "bcwhd" if self.is3d else "bcwh"
 
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
         log_p: Tensor = probs[:, self.idc, ...] #+ 1e-10).log()
         mask: Tensor = target[:, self.idc, ...].type(torch.float32)
 
-        loss = - einsum("bc...,bc...->c", mask, log_p)
+        loss = - einsum(f"{self.str},{self.str}->c", mask, log_p)
         loss = torch.dot(loss, self.weights)
 
-        mask = einsum("bc...->c", mask)
+        mask = einsum(f"{self.str}->c", mask)
         mask = torch.dot(mask, self.weights)
+
         #loss /= max(mask.sum(), 1e-10) #mask.sum() + 1e-10
         loss /= mask + 1e-10
         return loss
@@ -65,6 +73,8 @@ class GeneralizedDice():
         self.epsilon: float = kwargs["epsilon"] if "epsilon" in kwargs else 1
         self.strategy: float = kwargs["strategy"] if "strategy" in kwargs else None
         assert self.strategy in [None, "volume", "normalize"], "Wrong option when choosing strategy."
+        self.is3d = kwargs["in3d"]
+        self.str = "bcwhd" if self.is3d else "bcwh"
 
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
@@ -100,6 +110,8 @@ class WeightedGeneralizedDice():
         #If a class should be ignored, simply set weight=0 for that class.
         device = kwargs["device"]
         self.weights = torch.tensor([i for i in idc if i>0]).float().to(device)
+        self.is3d = kwargs["in3d"]
+        self.str = "bkwhd" if self.is3d else "bkwh"
 
     def __call__(self, probs: Tensor, target: Tensor) -> Tensor:
         pc = probs[:, self.idc, ...].exp().type(torch.float32)
@@ -107,8 +119,9 @@ class WeightedGeneralizedDice():
 
         #OPTION 1: instead of dynamically changing weights batch-based, keep them static based on input weights
         w: Tensor = 1 / ((self.weights+1e-10)**2)
-        intersection: Tensor = w * einsum("bk...,bk...->bk", pc, tc)
-        union: Tensor = w * (einsum("bk...->bk", pc) + einsum("bk...->bk", tc))
+    
+        intersection: Tensor = w * einsum(f"{self.str},{self.str}->bk", pc, tc)
+        union: Tensor = w * (einsum(f"{self.str}->bk", pc) + einsum(f"{self.str}->bk", tc))
 
         divided: Tensor = 1 - (2 * einsum("bk->b", intersection) + 1e-10) / (einsum("bk->b", union) + 1e-10)
 
@@ -126,8 +139,8 @@ def DicePerClass(probs: Tensor, target: Tensor):
     pc = probs.type(torch.float32).exp()
     tc = target.type(torch.float32)
     
-    intersection: Tensor = einsum("bc...,bc...->bc", pc, tc)
-    union: Tensor = (einsum("bc...->bc", pc) + einsum("bc...->bc", tc))
+    intersection: Tensor = einsum("bcwhd,bcwhd->bc", pc, tc)
+    union: Tensor = (einsum("bcwh...->bc", pc) + einsum("bcwh...->bc", tc))
 
     divided: Tensor = (2 * intersection + 1e-10) / (union + 1e-10)
     #if class present neither in GT nor OUT in the whole batch, the output==1
@@ -143,8 +156,8 @@ def AllDices(probs: Tensor, target: Tensor):
     pc = pc.scatter_(1, pc_bin, 1) #torch.ones(pc_bin.size()))
     tc = target.type(torch.float32)
     
-    intersection: Tensor = einsum("bc...,bc...->bc", pc, tc)
-    union: Tensor = (einsum("bc...->bc", pc) + einsum("bc...->bc", tc))
+    intersection: Tensor = einsum("bcwhd,bcwhd->bc", pc, tc)
+    union: Tensor = (einsum("bcwh...->bc", pc) + einsum("bcwh...->bc", tc))
 
     divided: Tensor = (2 * intersection + 1e-10) / (union + 1e-10)
     #if class present neither in GT nor OUT in the whole batch, the output==1
@@ -163,8 +176,8 @@ def batchGDL(probs: Tensor, target: Tensor, binary: bool = False):
         pc = pc.scatter_(1, pc_bin, 1)
     tc = target.type(torch.float32)
 
-    intersection: Tensor = einsum("bc...,bc...->b", pc, tc)
-    union: Tensor = einsum("bc...->b", tc) #ne bo nikoli 0. zmeri bo == numel. 
+    intersection: Tensor = einsum("bcwhd,bcwhd->b", pc, tc)
+    union: Tensor = einsum("bcwh...->b", tc) #ne bo nikoli 0. zmeri bo == numel. 
 
     divided: Tensor = intersection / union
    

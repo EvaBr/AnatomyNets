@@ -156,7 +156,7 @@ class ResNet(nn.Module):
         x_3 = self.layer3(x)
         x = self.layer4(x_3)
 
-        return x, x_3
+        return x #, x_3
 
 
 '''

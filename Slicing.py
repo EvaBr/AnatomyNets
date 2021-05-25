@@ -223,12 +223,11 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
                     allin = np.stack(allin, axis=0)
 
                     np.save(f"{outpath}/in2/subj{PID}_{slajs}_{counter}", allin) 
-    if sampling!=None:
-        #save sampling strategy info 
-        with open(f"{outpath}/sampling.txt", 'w') as out_file:
-            out_file.write(str(sampling))
+    
     with open(f"{outpath}/datainfo.txt", "w") as info_file:
-        info_file.write(f"Sliced by dim {sliced}. \nPatch size: {patch_size}\nDTs: {add_dts}\nsubsmpl: {make_subsampled}")
+        info_file.write(f"""Sliced by dim {sliced}. \nPatch size: {patch_size}
+                                    \nDTs: {add_dts}\nsubsmpl: {make_subsampled}
+                                    \nsampling: {sampling}""")
 
 #%%
 def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=None):
@@ -359,12 +358,11 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
 
                 np.save(f"{outpath}/in2/subj{PID}_{idx}_0", allin) 
 
-    if sampling!=None:
-        #save sampling strategy info 
-        with open(f"{outpath}/sampling.txt", 'w') as out_file:
-            out_file.write(str(sampling))
+    
     with open(f"{outpath}/datainfo.txt", "w") as info_file:
-        info_file.write(f"Sliced 3D patches. \nPatch size: {patch_size}\nDTs: {add_dts}\nsubsmpl: {make_subsampled}")
+        info_file.write(f"""Sliced 3D patches. \nPatch size: {patch_size}
+                            \nDTs: {add_dts}\nsubsmpl: {make_subsampled}
+                            \nsampling: {sampling}""")
 
 
 #cutting 2d whole slices, as in BL project

@@ -3,6 +3,7 @@
 POEM*/
 POEM/
 RESULTS/
+pretrainedResNet3D/
 movedata.sh
 
 # Byte-compiled / optimized / DLL files

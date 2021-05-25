@@ -41,7 +41,7 @@ def save_run(train_m, val_m, model, optimizer, save_to, epoch):
 def setup(args: argparse.Namespace):
     device = torch.device("cpu") if (not torch.cuda.is_available() or args.cpu) else torch.device("cuda")
 
-    net = getattr(Networks, args.network)(len(args.in_channels), args.n_class, len(args.lower_in_channels), args.extractor_net)
+    net = getattr(Networks, args.network)(len(args.in_channels), args.n_class, in_channels_lower=len(args.lower_in_channels), extractor_net=args.extractor_net, TriD=args.in3D)
     net = net.float()
     to_init = Networks.weights_init(args.network)
     net.apply(to_init)
@@ -63,7 +63,7 @@ def setup(args: argparse.Namespace):
                     state[k] = v.to(device)
     
     model = net.to(device)
-    loss = MultiTaskLoss(args.losses, device)
+    loss = MultiTaskLoss(args.losses, device, in3d=args.in3D)
     train_loader, val_loader = get_loaders(args.network, args.dataset, args.n_class, args.in_channels, args.lower_in_channels, args.batch_size, args.debug)
 
     return model, optimizer, loss, train_loader, val_loader, device, start_epoch
@@ -73,6 +73,7 @@ def setup(args: argparse.Namespace):
 def train(args: argparse.Namespace):
     torch.autograd.set_detect_anomaly(True)
     lr: float = args.l_rate
+    is3d: bool = args.in3D
     model, optimizer, loss_fn, train_loader, val_loader, device, start_epoch = setup(args)
 
     train_metrics = {"Loss": torch.zeros((args.n_epoch, ), device=device).type(torch.float32), 
@@ -90,6 +91,9 @@ def train(args: argparse.Namespace):
     numim = len(train_loader.dataset)
     numimval = len(val_loader.dataset)
     TensorCenterCropping = CenterCropTensor #assume 2d from the beginning
+    if is3d:
+        TensorCenterCropping = CenterCropTensor3d
+            
     for epoch in range(start_epoch, args.n_epoch+start_epoch):
         #train
         model.train()
@@ -106,10 +110,6 @@ def train(args: argparse.Namespace):
          #   print([i.shape for i in data])
             out = model(*data)
 
-            is3d = out.ndim==5  # b x c x hxw(xd)
-            if is3d:
-                TensorCenterCropping = CenterCropTensor3d
-            
          #   print(f"data0: {data[0].shape}, target: {target.shape}, out: {out.shape}")
             #for some nets, output will be smaller than target. Crop target centrally to match output:
             target, out = TensorCenterCropping(target, out)
@@ -228,6 +228,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--save_as", type=str, required=True)
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--schedule", action="store_true")
+    parser.add_argument("--in3D", action="store_true", help="Use 3D version of nets? Mind that data should be 3D then!")
 
    # sys.argv = ['Training.py', '--dataset=POEM80_dts', '--batch_size=32', '--network=UNet', '--n_epoch=100', '--l_rate=1e-3',
    #            "--in_channels 0 1 2 4 5", "--lower_in_channels 0 1 2 4 5", "--save_as=unet_dts", '--debug',

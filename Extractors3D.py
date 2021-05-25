@@ -123,7 +123,7 @@ class ResNet(nn.Module):
         self.no_cuda = no_cuda
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv3d(
-            1,
+            3, #changed 1-> 3 
             64,
             kernel_size=7,
             stride=(2, 2, 2),
@@ -144,7 +144,7 @@ class ResNet(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv3d):
-                m.weight = nn.init.kaiming_normal(m.weight, mode='fan_out')
+                m.weight = nn.init.kaiming_normal_(m.weight, mode='fan_out')
             elif isinstance(m, nn.BatchNorm3d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
@@ -180,6 +180,7 @@ class ResNet(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
+        
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
@@ -198,6 +199,9 @@ def load_weights_sequential(target, name):
 
     net_dict = target.state_dict()
     model_to_load = {k: v for k, v in source_state.items() if k in target.state_dict().keys()}
+    if 'conv1' in model_to_load:
+        #we know we're in 3D, original 3D model assumes 1channel images. While our PSP implem. makes 3-channel imgs for resnet.
+        model_to_load['conv1'] = torch.stack([model_to_load['conv1'] for i in range(3)], dim=1)  
     net_dict.update(model_to_load)
     target.load_state_dict(net_dict)
 
