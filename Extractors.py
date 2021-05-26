@@ -15,8 +15,12 @@ from torch.utils import model_zoo
 #        new_dict[k1] = v2
 #    target.load_state_dict(new_dict)
 
-def load_weights_sequential(target, source_state):
+def load_weights_sequential(target, source_state, channels_in):
     model_to_load= {k: v for k, v in source_state.items() if k in target.state_dict().keys()}
+    if 'conv1.weight' in model_to_load:
+        tmp = torch.cat([model_to_load['conv1.weight'] for i in range(channels_in//3+1)], dim=1)
+        model_to_load['conv1.weight'] = tmp[:,0:channels_in,...] #originally, there are three channels. we might need less, or at least not divisible by 3.
+
     target.load_state_dict(model_to_load)
 
 '''
@@ -108,10 +112,10 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, layers=(3, 4, 23, 3)):
+    def __init__(self, block, layers=(3, 4, 23, 3), channels_in=2):
         self.inplanes = 64
         super(ResNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.conv1 = nn.Conv2d(channels_in, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
@@ -163,36 +167,36 @@ class ResNet(nn.Module):
     Handy methods for construction
 '''
 
-def resnet18(pretrained=True):
-    model = ResNet(BasicBlock, [2, 2, 2, 2])
+def resnet18(pretrained=True, channels_in=2):
+    model = ResNet(BasicBlock, [2, 2, 2, 2], channels_in)
     if pretrained:
-        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet18']))
+        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet18']), channels_in)
     return model
 
 
-def resnet34(pretrained=True):
-    model = ResNet(BasicBlock, [3, 4, 6, 3])
+def resnet34(pretrained=True, channels_in=2):
+    model = ResNet(BasicBlock, [3, 4, 6, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet34']))
+        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet34']), channels_in)
     return model
 
 
-def resnet50(pretrained=True):
-    model = ResNet(Bottleneck, [3, 4, 6, 3])
+def resnet50(pretrained=True, channels_in=2):
+    model = ResNet(Bottleneck, [3, 4, 6, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet50']))
+        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet50']), channels_in)
     return model
 
 
-def resnet101(pretrained=True):
-    model = ResNet(Bottleneck, [3, 4, 23, 3])
+def resnet101(pretrained=True, channels_in=2):
+    model = ResNet(Bottleneck, [3, 4, 23, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet101']))
+        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet101']), channels_in)
     return model
 
 
-def resnet152(pretrained=True):
-    model = ResNet(Bottleneck, [3, 8, 36, 3])
+def resnet152(pretrained=True, channels_in=2):
+    model = ResNet(Bottleneck, [3, 8, 36, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet152']))
+        load_weights_sequential(model, model_zoo.load_url(model_urls['resnet152']), channels_in)
     return model

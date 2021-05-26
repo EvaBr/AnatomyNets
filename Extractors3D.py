@@ -117,13 +117,14 @@ class ResNet(nn.Module):
     def __init__(self,
                  block,
                  layers,
+                 channels_in,
                  shortcut_type='B',
                  no_cuda = False):
         self.inplanes = 64
         self.no_cuda = no_cuda
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv3d(
-            3, #changed 1-> 3 
+            channels_in, #changed 1-> channels_in, so it's the same as in 2d.
             64,
             kernel_size=7,
             stride=(2, 2, 2),
@@ -180,7 +181,7 @@ class ResNet(nn.Module):
         x = self.bn1(x)
         x = self.relu(x)
         x = self.maxpool(x)
-        
+
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
@@ -193,61 +194,61 @@ class ResNet(nn.Module):
 
 ### net construction
 
-def load_weights_sequential(target, name):
+def load_weights_sequential(target, name, channels_in):
     pretrain = torch.load(pretrain_paths[name])
     source_state = pretrain['state_dict']
 
     net_dict = target.state_dict()
     model_to_load = {k: v for k, v in source_state.items() if k in target.state_dict().keys()}
-    if 'conv1' in model_to_load:
-        #we know we're in 3D, original 3D model assumes 1channel images. While our PSP implem. makes 3-channel imgs for resnet.
-        model_to_load['conv1'] = torch.stack([model_to_load['conv1'] for i in range(3)], dim=1)  
+    if 'conv1.weight' in model_to_load:
+        #we know we're in 3D, original 3D model assumes 1channel images. While our PSP implem. takes in-channel imgs for resnet.
+        model_to_load['conv1.weight'] = torch.cat([model_to_load['conv1.weight'] for i in range(channels_in)], dim=1) 
     net_dict.update(model_to_load)
     target.load_state_dict(net_dict)
 
 
-def resnet18(pretrained=True):
+def resnet18(pretrained=True, channels_in=2):
     """Constructs a ResNet-18 model.
     """
-    model = ResNet(BasicBlock, [2, 2, 2, 2])
+    model = ResNet(BasicBlock, [2, 2, 2, 2], channels_in)
     if pretrained:
-        load_weights_sequential(model, 'resnet_18')
+        load_weights_sequential(model, 'resnet_18', channels_in)
     return model
 
 
-def resnet34(pretrained=True):
+def resnet34(pretrained=True, channels_in=2):
     """Constructs a ResNet-34 model.
     """
-    model = ResNet(BasicBlock, [3, 4, 6, 3])
+    model = ResNet(BasicBlock, [3, 4, 6, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, 'resnet_34')
+        load_weights_sequential(model, 'resnet_34', channels_in)
     return model
 
 
-def resnet50(pretrained=True):
+def resnet50(pretrained=True, channels_in=2):
     """Constructs a ResNet-50 model.
     """
-    model = ResNet(Bottleneck, [3, 4, 6, 3])
+    model = ResNet(Bottleneck, [3, 4, 6, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, 'resnet_50')
+        load_weights_sequential(model, 'resnet_50', channels_in)
     return model
 
 
-def resnet101(pretrained=True):
+def resnet101(pretrained=True, channels_in=2):
     """Constructs a ResNet-101 model.
     """
-    model = ResNet(Bottleneck, [3, 4, 23, 3])
+    model = ResNet(Bottleneck, [3, 4, 23, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, 'resnet_101')
+        load_weights_sequential(model, 'resnet_101', channels_in)
     return model
 
 
-def resnet152(pretrained=True):
+def resnet152(pretrained=True, channels_in=2):
     """Constructs a ResNet-101 model.
     """
-    model = ResNet(Bottleneck, [3, 8, 36, 3])
+    model = ResNet(Bottleneck, [3, 8, 36, 3], channels_in)
     if pretrained:
-        load_weights_sequential(model, 'resnet_152')
+        load_weights_sequential(model, 'resnet_152', channels_in)
     return model
 
     

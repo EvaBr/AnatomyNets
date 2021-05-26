@@ -355,9 +355,11 @@ class PSPNet(nn.Module):
 
         self.TriD = TriD
         self.in_channels = in_channels #the in_channels of the img! 
-        #here the in_channels are the expected nr of channels of an image.... RESNET has 3 by default! 
+        
+        #here the in_channels are the expected nr of channels of an image.... RESNET has 1-3 by default! 
         # so we need to add additional layer before resnet, to get to appropriate nr of channels... [any better ideas???]
-        self.prelayer = nn.Conv3d(self.in_channels, 3, kernel_size=1) if TriD else nn.Conv2d(self.in_channels, 3, kernel_size=1)#try also kernelSize=3?
+    #    self.prelayer = nn.Conv3d(self.in_channels, 3, kernel_size=1) if TriD else nn.Conv2d(self.in_channels, 3, kernel_size=1)#try also kernelSize=3?
+        #FIX: prelayer not needed anymore, fixed resnet so it starts with in_channels*3 nr channels, and weights are simply copied from original multiple times
 
         self.n_classes = n_classes
         self.get_features = self.get_pretrained(extractor_net, TriD=TriD) #for now we only use pretrained versions
@@ -383,11 +385,11 @@ class PSPNet(nn.Module):
 
     def get_pretrained(self, network, pretrained=True, TriD=False):
         if not TriD:
-            return getattr(Extractors, network)(pretrained) # globals()[network](pretrained)
-        return getattr(Extractors3D, network)(pretrained)
+            return getattr(Extractors, network)(pretrained, self.in_channels) # globals()[network](pretrained)
+        return getattr(Extractors3D, network)(pretrained, self.in_channels)
         
     def forward(self, x):
-        x = self.prelayer(x)
+    #    x = self.prelayer(x)
         feats = self.get_features(x) #here we assume the output size will be 1/8 of original img size
         #feats, for_deep_loss = ....
         #for now we don't use the auxiliary loss to improve training. so ignore for_deep_loss. Plus. Not available anyway in 3D atm
