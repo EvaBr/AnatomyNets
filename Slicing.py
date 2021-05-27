@@ -476,12 +476,13 @@ def remove_bckg_slices(datafolder):
 # %%
 
 def cutEval():
-    outpath2 = pathlib.Path('RESULTS', 'POEM_eval', 'TwoD')
-    outpath3 = pathlib.Path('RESULTS', 'POEM_eval', 'TriD')
+    outpath2 = pathlib.Path('POEM_eval', 'TwoD')
+    outpath3 = pathlib.Path('POEM_eval', 'TriD')
     patch_size = 50
     batch_size2 = 8
     batch_size3 = 5
-    GTs = pathlib.Path('RESULTS', 'POEM_eval', 'GTs')
+    GTs = pathlib.Path('POEM_eval', 'GTs')
+    GTs.mkdir(parents=True, exist_ok=True)
     for i in ['in1','in2']:
         pathlib.Path(outpath2, i).mkdir(parents=True, exist_ok=True)
         pathlib.Path(outpath3, i).mkdir(parents=True, exist_ok=True)
@@ -502,6 +503,9 @@ def cutEval():
     dty_paths.sort()
     mask_paths.sort()
     assert len(gt_paths)==len(wat_paths)==len(fat_paths)==len(dtx_paths)==len(dty_paths)==len(mask_paths)
+
+    #debugging:
+    #fat_paths, wat_paths, dtx_paths, dty_paths, gt_paths = fat_paths[:2], wat_paths[:2],dtx_paths[:2], dty_paths[:2], gt_paths[:2]
 
     nb_class = 7
 
@@ -544,11 +548,13 @@ def cutEval():
                 for k in range(16,wat.shape[2]+16,(patch_size-16)):
                     tmp_in1 = allin[:, i:i+50, j:j+50, k:k+50]
                     tmp_in2 = allin[:, i-16:i+66:3, j-16:j+66:3, k-16:k+66:3]
-                    print(f"in1 shape: {tmp_in1.shape}, in2 shape: {tmp_in2.shape}")
+                    
+                  #  print(f"in1: {tmp_in1.shape}, in2: {tmp_in2.shape}")
                     _, s10, s11, s12 = tmp_in1.shape
                     _, s20, s21, s22 = tmp_in2.shape
-                    tmp_in1 = np.pad(tmp_in1, ((0,),(50-s10,), (50-s11,), (50-s12,)))
-                    tmp_in2 = np.pad(tmp_in2, ((0,),(28-s20,), (28-s21,), (28-s22,))) #?28?
+                    tmp_in1 = np.pad(tmp_in1, ((0,0),(0,50-s10), (0,50-s11), (0,50-s12)))
+                    tmp_in2 = np.pad(tmp_in2, ((0,0),(0,28-s20), (0,28-s21), (0,28-s22)))
+                  #  print(f"NEW: \t {tmp_in1.shape}, in2: {tmp_in2.shape}")
 
                     np.save(pathlib.Path(outpath3, 'in1', f"subj{PID}_{i}_{j}_{k}.npy"), 
                             tmp_in1)
@@ -557,3 +563,5 @@ def cutEval():
 
             
         
+
+# %%
