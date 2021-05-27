@@ -170,9 +170,9 @@ def batchGDL(probs: Tensor, target: Tensor, binary: bool = False):
     tc = target.type(torch.float32)
 
     intersection: Tensor = einsum("bcwh...,bcwh...->b", pc, tc)
-    union: Tensor = einsum("bcwh...->b", tc) #ne bo nikoli 0. zmeri bo == numel. 
+    union: Tensor = einsum("bcwh...->b", pc) + einsum("bcwh...->b", tc) #ne bo nikoli 0. zmeri bo == numel. 
 
-    divided: Tensor = intersection / union
+    divided: Tensor = 2*intersection / union
    
     return divided
 

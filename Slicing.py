@@ -104,12 +104,19 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
         pathlib.Path(f"{outpath}/{i}").mkdir(parents=True, exist_ok=True)
 
     #POEM SLICING
-    gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
-    wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
-    fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
-    dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
-    dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
-    mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
+    #gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
+    #wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
+    #fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
+    #dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
+    #dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
+    #mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
+
+    gt_paths = glob("POEM/segms/CroppedSegmNew*")
+    wat_paths = glob("POEM/watfat/cropped*_wat*")
+    fat_paths = glob("POEM/watfat/cropped*_fat*")
+    dtx_paths = glob("POEM/distmaps/*x.nii")
+    dty_paths = glob("POEM/distmaps/*y.nii")
+    mask_paths = glob("POEM/masks/cropped*_mask.nii")
 
     gt_paths.sort()
     wat_paths.sort()
@@ -248,6 +255,14 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
     dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
     mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
 
+    #gt_paths = glob("POEM/segms/CroppedSegmNew*")
+    #wat_paths = glob("POEM/watfat/cropped*_wat*")
+    #fat_paths = glob("POEM/watfat/cropped*_fat*")
+    #dtx_paths = glob("POEM/distmaps/*x.nii")
+    #dty_paths = glob("POEM/distmaps/*y.nii")
+    #mask_paths = glob("POEM/masks/cropped*_mask.nii")
+
+
     gt_paths.sort()
     wat_paths.sort()
     fat_paths.sort()
@@ -380,6 +395,13 @@ def cutPOEMslices():
     dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
     dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
    
+    #gt_paths = glob("POEM/segms/CroppedSegmNew*")
+    #wat_paths = glob("POEM/watfat/cropped*_wat*")
+    #fat_paths = glob("POEM/watfat/cropped*_fat*")
+    #dtx_paths = glob("POEM/distmaps/*x.nii")
+    #dty_paths = glob("POEM/distmaps/*y.nii")
+    #mask_paths = glob("POEM/masks/cropped*_mask.nii")
+
     gt_paths.sort()
     wat_paths.sort()
     fat_paths.sort()
@@ -481,20 +503,28 @@ def cutEval():
     patch_size = 50
     batch_size2 = 8
     batch_size3 = 5
-    GTs = pathlib.Path('POEM_eval', 'GTs')
-    GTs.mkdir(parents=True, exist_ok=True)
+    GTs2 = pathlib.Path('POEM_eval', 'GTs_2D')
+    GTs3 = pathlib.Path('POEM_eval', 'GTs_3D')
+    GTs2.mkdir(parents=True, exist_ok=True)
+    GTs3.mkdir(parents=True, exist_ok=True)
     for i in ['in1','in2']:
         pathlib.Path(outpath2, i).mkdir(parents=True, exist_ok=True)
         pathlib.Path(outpath3, i).mkdir(parents=True, exist_ok=True)
 
     #POEM SLICING
-    gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
-    wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
-    fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
-    dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
-    dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
-    mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
+    #gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
+    #wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
+    #fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
+    #dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
+    #dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
+    #mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
 
+    gt_paths = glob("POEM/segms/CroppedSegmNew*")
+    wat_paths = glob("POEM/watfat/cropped*_wat*")
+    fat_paths = glob("POEM/watfat/cropped*_fat*")
+    dtx_paths = glob("POEM/distmaps/*x.nii")
+    dty_paths = glob("POEM/distmaps/*y.nii")
+    mask_paths = glob("POEM/masks/cropped*_mask.nii")
    
     gt_paths.sort()
     wat_paths.sort()
@@ -509,10 +539,15 @@ def cutEval():
 
     nb_class = 7
 
+    PIDS = ['500026', '500061', '500075', '500117', '500242', '500268', '500288', '500291', 
+            '500316', '500346', '500347', '500348', '500354', '500433', '500487']
+    
     for w,f,g,dx,dy,m in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths, mask_paths):
         PIDs = [re.findall(r"500[0-9]+", ppp)[0] for ppp in [w,f,g,dx,dy,m]]
         assert len(np.unique(PIDs)) == 1
         PID = PIDs[0]
+        if PID not in PIDS:
+            continue
         print(f"Slicing nr {PID}...")
         wat = nib.load(w).get_fdata()
         fat = nib.load(f).get_fdata()
@@ -534,32 +569,37 @@ def cutEval():
 
         #SAVE GT
         gt = get_one_hot(gt, nb_class) #new size C x H x W x D
-        np.save(pathlib.Path(GTs, f"subj{PID}.npy"), gt)
+        #np.save(pathlib.Path(GTs, f"subj{PID}.npy"), gt)
         #SAVE 2D SLICES
         for s in range(wat.shape[1]):
             np.save(pathlib.Path(outpath2, 'in1', f"subj{PID}_{s}.npy"), np.squeeze(allin[:,:,s,:]))
             np.save(pathlib.Path(outpath2, 'in2', f"subj{PID}_{s}.npy"), np.squeeze(allin[:,0::3,s,0::3]))
+            np.save(pathlib.Path(GTs2, f"subj{PID}_{s}.npy"), np.squeeze(gt[:,:,s,:]))
             
         #SAVE 3D PATCHES
         #for easier subsampl. data, first pad with 0s:
-        allin = np.pad(allin, ((0,), (16,), (16,), (16,)))
+        allin = np.pad(allin, ((0,), (16,), (16,), (16,)), mode='constant')
+        gt = np.pad(gt, ((0,), (16,), (16,), (16,)), mode='constant')
         for i in range(16,wat.shape[0]+16,(patch_size-16)):
             for j in range(16,wat.shape[1]+16,(patch_size-16)):
                 for k in range(16,wat.shape[2]+16,(patch_size-16)):
                     tmp_in1 = allin[:, i:i+50, j:j+50, k:k+50]
                     tmp_in2 = allin[:, i-16:i+66:3, j-16:j+66:3, k-16:k+66:3]
+                    tmp_gt = gt[:, i:i+50, j:j+50, k:k+50]
                     
                   #  print(f"in1: {tmp_in1.shape}, in2: {tmp_in2.shape}")
                     _, s10, s11, s12 = tmp_in1.shape
                     _, s20, s21, s22 = tmp_in2.shape
-                    tmp_in1 = np.pad(tmp_in1, ((0,0),(0,50-s10), (0,50-s11), (0,50-s12)))
-                    tmp_in2 = np.pad(tmp_in2, ((0,0),(0,28-s20), (0,28-s21), (0,28-s22)))
+                    tmp_in1 = np.pad(tmp_in1, ((0,0),(0,50-s10), (0,50-s11), (0,50-s12)), mode='constant')
+                    tmp_gt = np.pad(tmp_gt, ((0,0),(0,50-s10), (0,50-s11), (0,50-s12)), mode='constant')
+                    tmp_in2 = np.pad(tmp_in2, ((0,0),(0,28-s20), (0,28-s21), (0,28-s22)), mode='constant')
                   #  print(f"NEW: \t {tmp_in1.shape}, in2: {tmp_in2.shape}")
 
                     np.save(pathlib.Path(outpath3, 'in1', f"subj{PID}_{i}_{j}_{k}.npy"), 
                             tmp_in1)
                     np.save(pathlib.Path(outpath3, 'in2', f"subj{PID}_{i}_{j}_{k}.npy"), 
                             tmp_in2)
+                    np.save(pathlib.Path(GTs3, f"subj{PID}_{i}_{j}_{k}.npy"), tmp_gt)
 
             
         
