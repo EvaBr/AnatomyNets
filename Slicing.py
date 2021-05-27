@@ -474,3 +474,86 @@ def remove_bckg_slices(datafolder):
 #check2Dcuts("POEM80", "500077_30_0", True)
 
 # %%
+
+def cutEval():
+    outpath2 = pathlib.Path('RESULTS', 'POEM_eval', 'TwoD')
+    outpath3 = pathlib.Path('RESULTS', 'POEM_eval', 'TriD')
+    patch_size = 50
+    batch_size2 = 8
+    batch_size3 = 5
+    GTs = pathlib.Path('RESULTS', 'POEM_eval', 'GTs')
+    for i in ['in1','in2']:
+        pathlib.Path(outpath2, i).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(outpath3, i).mkdir(parents=True, exist_ok=True)
+
+    #POEM SLICING
+    gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
+    wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
+    fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
+    dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
+    dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
+    mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
+
+   
+    gt_paths.sort()
+    wat_paths.sort()
+    fat_paths.sort()
+    dtx_paths.sort()
+    dty_paths.sort()
+    mask_paths.sort()
+    assert len(gt_paths)==len(wat_paths)==len(fat_paths)==len(dtx_paths)==len(dty_paths)==len(mask_paths)
+
+    nb_class = 7
+
+    for w,f,g,dx,dy,m in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths, mask_paths):
+        PIDs = [re.findall(r"500[0-9]+", ppp)[0] for ppp in [w,f,g,dx,dy,m]]
+        assert len(np.unique(PIDs)) == 1
+        PID = PIDs[0]
+        print(f"Slicing nr {PID}...")
+        wat = nib.load(w).get_fdata()
+        fat = nib.load(f).get_fdata()
+        gt = nib.load(g).get_fdata()
+        x = nib.load(dx).get_fdata()
+        y = nib.load(dy).get_fdata()
+        maska = nib.load(m).get_fdata()
+
+        tmp_z = np.ones(maska.shape)
+        startz, endz = np.nonzero(maska.sum(axis=(0,1)))[0][0], np.nonzero(maska.sum(axis=(0,1)))[0][-1]
+        tmp_z[:,:,startz] = 0
+        tmp_z = 2.*dt_edt(tmp_z)/(endz-startz) - 1.
+
+        z = maska*tmp_z#create artificially, simply DT from left to right
+        bd = dt_edt(maska) #create artificially, simply DT from border
+        bd = bd/np.max(bd)
+
+        allin = np.stack([wat, fat, x, y, z, bd], axis=0)
+
+        #SAVE GT
+        gt = get_one_hot(gt, nb_class) #new size C x H x W x D
+        np.save(pathlib.Path(GTs, f"subj{PID}.npy"), gt)
+        #SAVE 2D SLICES
+        for s in range(wat.shape[1]):
+            np.save(pathlib.Path(outpath2, 'in1', f"subj{PID}_{s}.npy"), np.squeeze(allin[:,:,s,:]))
+            np.save(pathlib.Path(outpath2, 'in2', f"subj{PID}_{s}.npy"), np.squeeze(allin[:,0::3,s,0::3]))
+            
+        #SAVE 3D PATCHES
+        #for easier subsampl. data, first pad with 0s:
+        allin = np.pad(allin, ((0,), (16,), (16,), (16,)))
+        for i in range(16,wat.shape[0]+16,(patch_size-16)):
+            for j in range(16,wat.shape[1]+16,(patch_size-16)):
+                for k in range(16,wat.shape[2]+16,(patch_size-16)):
+                    tmp_in1 = allin[:, i:i+50, j:j+50, k:k+50]
+                    tmp_in2 = allin[:, i-16:i+66:3, j-16:j+66:3, k-16:k+66:3]
+                    print(f"in1 shape: {tmp_in1.shape}, in2 shape: {tmp_in2.shape}")
+                    _, s10, s11, s12 = tmp_in1.shape
+                    _, s20, s21, s22 = tmp_in2.shape
+                    tmp_in1 = np.pad(tmp_in1, ((0,),(50-s10,), (50-s11,), (50-s12,)))
+                    tmp_in2 = np.pad(tmp_in2, ((0,),(28-s20,), (28-s21,), (28-s22,))) #?28?
+
+                    np.save(pathlib.Path(outpath3, 'in1', f"subj{PID}_{i}_{j}_{k}.npy"), 
+                            tmp_in1)
+                    np.save(pathlib.Path(outpath3, 'in2', f"subj{PID}_{i}_{j}_{k}.npy"), 
+                            tmp_in2)
+
+            
+        
