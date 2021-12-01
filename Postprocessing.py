@@ -9,7 +9,7 @@ from helpers import flatten_one_hot, get_one_hot, CenterCropTensor, CenterCropTe
 import matplotlib.patches as mpatches
 import matplotlib
 import random
-from Losses import DicePerClass, AllDices, DicePerClassBinary, batchGDL
+from Losses import DicePerClass, AllDices, DicePerClassBinary, batchGDL, subjectDices
 #matplotlib.use('Agg')
 
 
@@ -97,6 +97,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     allfindin2 = []
     for pid in pids:
         findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}*.npy")
+        #findgts = glob.glob(f"./{datafolder}/GTs_2D/*{pid}*.npy")
         findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
         findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
         findgts.sort(), findin1.sort(), findin2.sort()
@@ -128,9 +129,9 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     in3d = tgtonehot*(entmpgt.ndim==4) + (not tgtonehot)*(entmpgt.ndim==3)
     if in3d:
         #set the right function to use
-        TensorCroping = CenterCropTensor3d
+        TensorCropping = CenterCropTensor3d
     else:
-        TensorCroping = CenterCropTensor
+        TensorCropping = CenterCropTensor
 
     data = torch.stack([torch.from_numpy(np.load(i1)).float().to(device) for i1 in allfindin1], dim=0)
     data = [data[:, whichin1, ...]]
@@ -265,48 +266,115 @@ def get3Ddice(PID, in3d, folder, network, best_ep=True):
     else:
         subject = [i for i in Path('POEM_eval', 'TwoD', 'in1').glob(f"*{PID}*.npy")]
        
-    subject = natsorted(subject)
+    subject = sorted(subject)
     #do inference to get batched output:
     out = doInference(subject, folder, network, best_ep)
 
     #calculate Dice:
     if in3d:
-        gtpaths = natsorted(list(Path('POEM_eval', 'GTs_3D').glob(f"*{PID}*.npy")))
+        gtpaths = sorted(list(Path('POEM_eval', 'GTs_3D').glob(f"*{PID}*.npy")))
     else:
-        gtpaths = natsorted(list(Path('POEM_eval', 'GTs_2D').glob(f"*{PID}*.npy")))
+        gtpaths = sorted(list(Path('POEM_eval', 'GTs_2D').glob(f"*{PID}*.npy")))
     gt = [torch.from_numpy(np.load(i)) for i in gtpaths]
     gt = torch.stack(gt)
     
    # print([[i.name, j.name] for i,j in zip(subject, gtpaths)])
     gt, _ = CenterCropTensor3d(gt, out) #in case of deepmedic, gt should be cropped to out size
     
-    Dices = batchGDL(out.transpose(0,1), gt.transpose(0,1), binary=True) #DicePerClassBinary(out, gt) <-this avges over all patches... not cool
+   # Dices = batchGDL(out.transpose(0,1), gt.transpose(0,1), binary=True) #DicePerClassBinary(out, gt) <-this avges over all patches... not cool
+    Dices, GDL = subjectDices(out, gt, binary=True)
 
-    return Dices 
+    return Dices, GDL
 
+def cutme(PID, patch, net, in3d):
+    return 0,0 
 
-def Calc3Ddices(folder, network, best_ep=True):
+def get3Ddice2(PID, patch, in3d, folder, network, best_ep=True):
+    """PID = PID of a subject to calculate 3D Dice on 
+        patch = sizes of pathes the training was done on (so eval is done the same way)
+        folder = results folder, from where your net will be loaded
+        network = which net to load and use for eval
+        best_ep = evaluate at best epoch? If false, it evals after complete training."""
+
+    #now we don't use precut data, instead cut subject on the fly
+    gt, subject = cutme(PID, patch, network, in3d=in3d)
+        
+    #do inference to get batched output:
+    out = doInference(subject, folder, network, best_ep)
+
+    #calculate Dice:
+    Dices, GDL = subjectDices(out, gt, binary=True)
+
+    return Dices, GDL 
+
+#%%
+
+def Calc3Ddices(PIDS, folder, in3d, network, best_ep=True):
     """ folder = results folder, from where your net will be loaded
         network = which net to load and use for eval
         best_ep = evaluate at best epoch? If false, it evals after complete training."""
     #hardcoded for now. Use only subjects from eval. 
+     
+    #pids from poem_eval:
+ #   PIDS = ['500022', '500026', '500061', '500075', '500117', '500204', '500242', 
+ #           '500268', '500288', '500291', '500316', '500346', '5000347', '500348', 
+ #           '500354', '5000433', '5000487']
+    #poem25_3d:
+    #PIDS = ['500018', '500051', '500053', '500056', '500061', '500204', '500253',
+    #        '500280', '500281', '500304', '500346', '500354', '500357', '500395',
+    #        '500487']
+    #poem25:
     PIDS = ['500026', '500061', '500075', '500117', '500242', '500268', '500288', '500291', 
             '500316', '500346', '500347', '500348', '500354', '500433', '500487']
-    
-    dices = [] 
-    for pid in tqdm(PIDS):
-        print(f"\nDoing PID {pid}...")
-        dices.append(get3Ddice(pid, folder, network, best_ep).cpu().numpy())
+    #poem25_2:
+    #PIDS = ['500017', '500062', '500159', '500179', '500204', '500242', '500281', '500297', 
+    #        '500304', '500316', '500318', '500321', '500347', '500354', '500433']
+    #poem80: 
+    #PIDS = ['500061', '500075', '500158', '500159', '500167', '500179', '500235', '500253', '500291', 
+    #        '500316', '500321', '500347', '500354', '500406', '500429']
+    #poem80_2: 
+    #PIDS = ['500018', '500051', '500053', '500056', '500062', '500117', '500167', '500241', '500280', 
+    #        '500297', '500318', '500357', '500379', '500429', '500487']
+
+
+    dices = []
+    pidsbar = tqdm(PIDS)
+    for pid in pidsbar:
+        #print(f"\nDoing PID {pid}...")
+        pidsbar.set_postfix({'Doing PID': pid})
+        ds, gdls = get3Ddice(pid, in3d, folder, network, best_ep)
+        dices.append(np.concatenate(([gdls.cpu().numpy()], ds.cpu().numpy())))
 
     #save results in csv
-    zaDF = np.stack([PIDS, np.vstack(dices)], axis=0)
-    cols = ['PID', 'Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
-    df = pd.DataFrame(zaDF, columns=cols)
+    zaDF = np.vstack(dices)
+    cols = ['GDL', 'Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
+    df = pd.DataFrame(zaDF, columns=cols, index=PIDS)
+
+    print(df)
     
-    with open(f'POEM_eval_{folder}_{network}.csv', 'w') as f:
+    best_epoch=""
+    if best_ep:
+        best_epoch = "_BEST"
+    with open(f'POEM_eval_{folder}_{network}{best_epoch}.csv', 'w') as f:
         df.to_csv(f)  #OBS if file exists, it will only append data. 
     
 
 
     
 # %%
+#twen = plotOutput('poem80_dts/deepmed_w/deepmed', 'POEM80_dts', '500061', take20=[71, 64, 55, 164, 43, 47])
+
+#%%
+PIDS = ['500018', '500051', '500053', '500056', '500061', '500204', '500253','500280', '500281', '500304', '500346', '500354', '500357', '500395','500487']
+Calc3Ddices(PIDS, 'poem25-3D', True, 'unet')
+Calc3Ddices(PIDS, 'poem25-3D', True, 'unet_dts')
+Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet')
+Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet_dts')
+Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed')
+Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed_dts')
+Calc3Ddices(PIDS, 'poem25-3D', True, 'unet', False)
+Calc3Ddices(PIDS, 'poem25-3D', True, 'unet_dts', False)
+Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet', False)
+Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet_dts', False)
+Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed', False)
+Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed_dts', False)
