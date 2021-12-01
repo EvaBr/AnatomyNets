@@ -176,6 +176,22 @@ def batchGDL(probs: Tensor, target: Tensor, binary: bool = False):
    
     return divided
 
+def subjectDices(probs: Tensor, target: Tensor, binary: bool = False):
+    pc = probs.type(torch.float32).exp()
+    if binary:
+        pc_bin = torch.argmax(pc, dim=1, keepdim=True) #better report it on binary outs.
+        pc = pc.zero_()
+        pc = pc.scatter_(1, pc_bin, 1)
+    tc = target.type(torch.float32)
+
+    intersection: Tensor = einsum("bcwh...,bcwh...->c", pc, tc)
+    union: Tensor = einsum("bcwh...->c", pc) + einsum("bcwh...->c", tc) #ne bo nikoli 0. zmeri bo == numel. 
+
+    divided: Tensor = 2*intersection / union
+    GDL: Tensor = 2*intersection.sum() / union.sum()
+   
+    return divided, GDL
+
 class FocalLoss():
     def __init__(self, **kwargs):
         # Self.idc is used to filter out some classes of the target mask. Use fancy indexing
