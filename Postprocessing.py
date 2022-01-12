@@ -152,7 +152,7 @@ def Compute3DDice(pid:int, netparams:str, patchsize:int,
     slicer = Slicer(size_full, patchsize, in1, in2, in3D, bydim, step) #return string slice, include all channels
     # for cutting out the middle part based on step:
     #slice((sf-step)//2, sf-np.ceil((sf-step)/2))
-    slicing = "".join([f'.narrow({idx}, {(patchsize-step)//2}, {step})' for idx in range(2,(4+in3D))])
+    slicing = "".join([f'.narrow({idx}, {(patchsize-step)//2}, {step})' for idx in range(2,(4+in3D))]) if step>0 else ""
     with torch.no_grad():
         while slicer.todo>0:
             gtslices, in1slices, in2slices =  slicer.get_batch(batch) #multiple slices
