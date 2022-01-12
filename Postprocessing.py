@@ -1,46 +1,20 @@
 #%%
-import matplotlib.pyplot as plt 
+from pathlib import Path
+from tqdm import tqdm
 import numpy as np 
-import pandas as pd
 import Networks
 import torch
-import glob
+from glob import glob
 from helpers import flatten_one_hot, get_one_hot, CenterCropTensor, CenterCropTensor3d
-import matplotlib.patches as mpatches
-import matplotlib
-import random
-from Losses import DicePerClass, AllDices, DicePerClassBinary, batchGDL, subjectDices
-#matplotlib.use('Agg')
+from Losses import subjectDices
+import nibabel as nib
+from typing import List, Tuple, Dict, Any
+from scipy.ndimage import distance_transform_edt as dt_edt
+from slicer import Slicer
 
 
 
-
-def compare_curves(list_of_names, plot_names = None, individ_Dices = [0,1,2,3,4,5,6]):
-    if plot_names==None:
-        plot_names = list_of_names
-    #read in metrics
-    metrics = {plotname: pd.read_csv(f"RESULTS/{name}.csv") for plotname,name in zip(plot_names, list_of_names)}
-    Dice_names = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
-    to_plot = ['Loss'] + [Dice_names[i] for i in individ_Dices]
-
-    L = len(to_plot)
-    cols, rows = min(3,L), np.ceil(L/3)
-    for tip in [("", "TRAINING"), ("val_", "VALIDATION")]:
-        plt.figure(figsize = (cols*7,rows*5))
-        plt.suptitle(tip[1])
-        for idx, what in enumerate(to_plot):
-            plt.subplot(rows, cols, idx+1)
-            plt.title(what)
-            for name in metrics:
-                plt.plot(getattr(metrics[name], f"{tip[0]}{what}"), label=name)
-            plt.legend()
-        plt.show()
-    
-
-#compare_curves(['Third_unet', 'Fourth_unet'])
-
-# %%
-def getchn(args, string):
+def getchn(args: List[str], string:str) -> Tuple[int, List[int]]:
     cnt = 0
     whichchans = []
     start = [i for i in range(len(args)) if string in args[i]]
@@ -54,16 +28,12 @@ def getchn(args, string):
         whichchans.append(int(args[i]))
     return cnt, whichchans
 
-def plotOutput(params, datafolder, pids, doeval=True, take20=None):
-    """After training a net and saving its state to name PARAMS,
-         run inference on subject PID from DATAFOLDER, and plot results+GT. 
-         PID should be subject_slice, and all subject_slice_x will be run.
-         E.g. plotOutput('First_unet', 'POEM', '500177_30'). """
 
+def getNetwork(params:str, dev:str = 'cpu') -> Tuple[Any, List, List, bool]:
     #default settings:
     Arg = {'network': None, 'n_class':7, 'in_channels':2, 'lower_in_channels':2, 'extractor_net':'resnet34'}
     
-    with open(f"RESULTS/{params}_args.txt", "r") as ft:
+    with open(f"RESULTS/{params}_args.txt", "r") as ft: #TODO: fix to pathlib for easier use
         args = ft.read().splitlines()
     tmpargs = [i.strip('--').split("=") for i in args if ('--' in i and '=' in i)]
     chan1, whichin1 = getchn(args, 'in_chan')
@@ -74,7 +44,7 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     
     #overwrite if given in file:
     Arg.update(args)
-    device = torch.device('cpu')
+    use_in2 = Arg['network']=='DeepMedic'
 
     net = getattr(Networks, Arg['network'])(Arg['in_channels'], Arg['n_class'], Arg['lower_in_channels'], Arg['extractor_net'], in3D)
     net = net.float()
@@ -82,299 +52,146 @@ def plotOutput(params, datafolder, pids, doeval=True, take20=None):
     loaded = torch.load(f"RESULTS/{params}", map_location=lambda storage, loc: storage)
     net.load_state_dict(loaded['state_dict'])
     
+    device = torch.device(dev)
+    net = net.to(device)
+
+    return net, whichin1, whichin2 if use_in2 else [], in3D
+
+
+def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    #leavebckg==what border of bck to leave around subj (otherwise we cut the imgs so that 
+    # they are as tight around subj (mask==1) as possible).
+    dx, dy, m, g, f, w = sorted(Path('POEM').rglob(f"*{pid}*.nii"))
+    # order: dtx, dty, mask, gt, fat, wat
+    wat = nib.load(str(w)).get_fdata()
+    fat = nib.load(str(f)).get_fdata()
+    gt = nib.load(str(g)).get_fdata()
+    maska = nib.load(str(m)).get_fdata()
+    x = nib.load(str(dx)).get_fdata()
+    y = nib.load(str(dy)).get_fdata()       
+    gt = get_one_hot(gt*maska, 7) #to make sure segms will only be done inside subj, lets multiply by mask:
+   
+    tmp_z = np.ones(maska.shape)
+    tmp = maska.sum(axis=(0,1))
+    startz, endz = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    tmp_z[:,:,startz] = 0
+    tmp_z = 2.*dt_edt(tmp_z)/(endz-startz) - 1.
+
+    z = maska*tmp_z#create artificially, simply DT from left to right
+    bd = dt_edt(maska) #create artificially, simply DT from border
+    bd = bd/np.max(bd)
+
+    allin = np.stack([wat, fat, x, y, z, bd], axis=0)
+    
+    tmp = maska.sum(axis=(1,2))
+    startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    tmp = maska.sum(axis=(0,2))
+    starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    
+    #new starts/ends based on the required border width:
+    x, y, z = maska.shape
+    startx = max(0, startx-leavebckg) 
+    starty = max(0, starty-leavebckg) 
+    startz = max(0, startz-leavebckg) 
+    endx = min(x, endx+leavebckg+1)
+    endy = min(y, endy+leavebckg+1)
+    endz = min(z, endz+leavebckg+1)
+
+   # print(("orig.sizes:", maska.shape))
+   # print(("new slice:", (startx,endx,starty,endy,startz,endz)))
+    maska = maska[startx:endx, starty:endy, startz:endz]
+    allin = allin[:, startx:endx, starty:endy, startz:endz]
+   # print(("new sizes:", maska.shape, allin.shape))
+    #to make sure segms will only be done inside subj, lets multiply by mask:
+    return allin*maska, gt[:, startx:endx, starty:endy, startz:endz], maska
+    
+
+
+def Compute3DDice(pid:int, netparams:str, patchsize:int, 
+            batch:int = 10, bydim:int = 1, doeval:bool = True, dev:str = 'cpu', step:int=0) -> List[float]:
+    #OBS: in case of deepmed, patchsize means the size of output patch!
+    #(i.e. if patchsize=9, the input to network will be 25x25)
+    #step = in what steps you take patches. if ==0, you take nonoverlapping ones. if K, patch starts 
+    # at prev_patch_start+K.
+
+    # GET NET:
+    net, in1, in2, in3D = getNetwork(netparams, dev)
     if doeval:
         net.eval()
-       
-    net = net.to(device)
-    #load data&GT
-    if isinstance(pids, str):
-        pids = [pids]
-
-    use_in2 = Arg['network']=='DeepMedic'
-    allL = 0
-    allfindgts = []
-    allfindin1 = []
-    allfindin2 = []
-    for pid in pids:
-        findgts = glob.glob(f"./{datafolder}/*/gt/*{pid}*.npy")
-        #findgts = glob.glob(f"./{datafolder}/GTs_2D/*{pid}*.npy")
-        findin1 = glob.glob(f"./{datafolder}/*/in1/*{pid}*.npy")
-        findin2 = glob.glob(f"./{datafolder}/*/in2/*{pid}*.npy")
-        findgts.sort(), findin1.sort(), findin2.sort()
-      #  print(findgts)
-
-        #all subslices in one image.
-        L = len(findgts)
-        if  L>20: #ugly but needed to avoid too long compute
-            if take20==None:
-                take20 = random.sample(range(L), 20)
-            findgts = [findgts[tk] for tk in take20]
-            findin1 = [findin1[tk] for tk in take20]
-            if use_in2:
-                findin2 = [findin2[tk] for tk in take20]
-            L=len(take20)
-        
-        allL += L 
-        allfindgts.extend(findgts)
-        allfindin1.extend(findin1)
-        allfindin2.extend(findin2)
-
+    device = torch.device(dev)
+    # LOAD DATA:
+    allin, gt, mask = loadSubject(pid, patchsize//2)
     
-    organs = ['Bckg', 'Bladder', 'KidneyL', 'Liver', 'Pancreas', 'Spleen', 'KidneyR']
-    if len(organs)!=Arg['n_class']: #in case not POEM dataset used
-        organs = [str(zblj) for zblj in range(Arg['n_class'])]
+    # CUT AND EVAL: loop through cutting smaller pieces, moving to torch and eval
+    segmented = np.zeros((1,7))
+    existing = np.zeros((1,7))
+    intersec = np.zeros((1,7)) #these three needed to gather results, for post dice compute
+    axes = [0,2,3] + ([4] if in3D else [])
 
-    entmpgt = np.load(allfindgts[0])
-    tgtonehot = entmpgt.shape[0]==7 #are targets one hot encoded?
-    in3d = tgtonehot*(entmpgt.ndim==4) + (not tgtonehot)*(entmpgt.ndim==3)
-    if in3d:
-        #set the right function to use
-        TensorCropping = CenterCropTensor3d
-    else:
+    size_full = allin[0].shape #shape of 3d img, one channel
+
+    #set the right function to use
+    TensorCropping = CenterCropTensor3d
+    padding = [(0,0),(0,patchsize),(0,patchsize),(0,patchsize)] #(16,patchsize+16)
+    paddingall = [(0,0),(0,patchsize),(0,patchsize),(0,patchsize)] #(16,patchsize+16)
+    
+    if in2: #deep med, we need to pad the input on all sides to be able to cut pieces as wanted
+        paddingall[1:] = [(16+8,patchsize+16+8)]*3
+        patchsize = patchsize-16 
+        #since patchsize, as it goes into slicer, means the size of network output
+        
+    if not in3D: 
+        padding[bydim+1] = (0,0)
+        paddingall[bydim+1] = (0,0)
         TensorCropping = CenterCropTensor
-
-    data = torch.stack([torch.from_numpy(np.load(i1)).float().to(device) for i1 in allfindin1], dim=0)
-    data = [data[:, whichin1, ...]]
-    target = [flatten_one_hot(np.load(g)) if tgtonehot else np.load(g) for g in allfindgts] 
-    target_oh = torch.stack([torch.from_numpy(np.load(g)).to(device) if tgtonehot else torch.from_numpy(get_one_hot(np.load(g),7)).to(device) for g in allfindgts], dim=0)
-       
-    if use_in2:
-        in2 = torch.stack([torch.from_numpy(np.load(i2)).float().to(device) for i2 in allfindin2], dim=0)
-        data.append(in2[:, whichin2, ...])
     
-    out = net(*data)
-    target_oh, out = TensorCropping(target_oh, out)
-    dices = AllDices(out, target_oh) #DicePerClass(out, target_oh)
-  #  print((out.shape, target_oh.shape))
-    outs = [flatten_one_hot(o.detach().squeeze().numpy()) for o in out] 
+    mask = np.pad(mask, padding[1:], mode='constant')
+    gt = np.pad(gt, padding, mode='constant')
+    allin = np.pad(allin, paddingall, mode='constant')
     
-    fig, ax_tuple = plt.subplots(nrows=allL, ncols=2, figsize = (10, allL*6+1), tight_layout = True)
-    #for compatibility reasons:
-    if ax_tuple.ndim<2:
-        ax_tuple = ax_tuple[np.newaxis, ...]
-    plt.suptitle(params)
-    for ind in range(len(outs)):  
-        #now plot :)
-        targetind, outsind = TensorCropping(target[ind], outs[ind]) #crop to be more comparable
-      #  print((outsind.shape, targetind.shape))
-        if in3d:
-            sl = targetind.shape[-2]//2
-            targetind, outsind = targetind[...,sl,:], outsind[...,sl,:]
-
-        ax1 = ax_tuple[ind, 0]
-        ax1.set_title('GT')
-        ax1.axis('off')
-        ax1.imshow(targetind, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
+    slicer = Slicer(size_full, patchsize, in1, in2, in3D, bydim, step) #return string slice, include all channels
+    # for cutting out the middle part based on step:
+    #slice((sf-step)//2, sf-np.ceil((sf-step)/2))
+    slicing = "".join([f'.narrow({idx}, {(patchsize-step)//2}, {step})' for idx in range(2,(4+in3D))])
+    with torch.no_grad():
+        while slicer.todo>0:
+            gtslices, in1slices, in2slices =  slicer.get_batch(batch) #multiple slices
         
-        ax2 = ax_tuple[ind, 1]
-        ax2.set_title('OUT')
-        ax2.axis('off')
-        im = ax2.imshow(outsind, cmap='Spectral', vmin=0, vmax=Arg['n_class'])
-        
-        values = np.arange(Arg['n_class'])
-        colors = [ im.cmap(im.norm(value)) for value in values]
-        # create a patch (proxy artist) for every color 
-        patches = [ mpatches.Patch(color=colors[i], label=organs[i]) for i in range(len(values)) ]
-        # put those patched as legend-handles into the legend
-        ax2.legend(handles=patches, bbox_to_anchor=(1.05, 1.), loc=2, borderaxespad=0. )
+            gts = np.stack(list(map(eval, [f'gt[{slajs}]' for slajs in gtslices])), axis=0)
+            in1s = np.stack(list(map(eval, [f'allin[{slajs}]' for slajs in in1slices])), axis=0)
+            #maske = np.stack([eval(f'mask[{slajs[2:]}]') for slajs in gtslices], axis=0)
+            maske = np.stack(list(map(eval, [f'mask[{slajs[2:]}]' for slajs in gtslices])), axis=0)
+            
+            # move to torch:
+            target_oh = torch.from_numpy(gts).squeeze().to(device)
+            data = [torch.from_numpy(in1s).squeeze().float().to(device)] #input 1
+            if in2:
+                #in2s = np.stack([eval(f'allin[{slajs}]') for slajs in in2slices], axis=0)
+                in2s = np.stack(list(map(eval, [f'allin[{slajs}]' for slajs in in2slices])), axis=0)
+                data.append(torch.from_numpy(in2s).squeeze().float().to(device)) #input 2
+    
+            #run net on data. get output, save sums in dice gather lists
+            out = net(*data).exp()
+            target_oh, out = TensorCropping(target_oh, out) #in case of PSP net, might be that output is bigger than input/GT
+            #dices = AllDices(out, target_oh)
+            maske = torch.from_numpy(maske).squeeze().unsqueeze(1).float().to(device)
 
-        #write out also Dices:
-        dajci = dices[ind].detach().squeeze().numpy()
-        present_classes = [i for i in range(7) if i in target[ind]]
-        t = ax2.text(1.08, 0.5, 'Dices:', size='medium', horizontalalignment='center', verticalalignment='center', transform=ax2.transAxes)
-        for d in range(7): 
-            t = ax2.text(1.1, 0.45-d*0.05, f"{organs[d]}: {dajci[d]:.3f}", size='small', transform=ax2.transAxes)
+            #cut only the middle part of OUT, MASKE and TARGET_OH for eval (depending on the step size)
+            maske = eval('maske'+slicing)
+            target_oh = eval('target_oh'+slicing)
+            out = eval('out'+slicing)
 
-    plt.show()
-    #plt.savefig('foo.png')
-    #print(dices)
-    return take20
+            #when summing up, use only the middle of the patches. Depending on how big 'step' was. 
+            segmented += torch.sum(out*maske, axis=axes).cpu().numpy() 
+            existing += torch.sum(target_oh*maske, axis=axes).cpu().numpy()
+            intersec += torch.sum(target_oh*maske*out, axis=axes).cpu().numpy()
+            #TODO: save sums in segmented, existing, intersec. Also use mask? (then it needs cutting!!)
+    
+    #all saved, now calc actual dices:
+    Dices = 2*intersec/(existing+segmented) #calc dice from the gathering lists
+
+    return Dices
 
 
 
 # %%
-# computing 3D Dice on entire subjects
-from pathlib import Path
-from tqdm import tqdm
-import re
-from natsort import natsorted 
-
-
-
-def doInference(subject, folder, network, best_ep=True):
-    """subject = sorted list of paths of all slices for a subject
-        folder = results folder, from where your net will be loaded
-        network = which net to load and use for eval
-        best_ep = evaluate at best epoch? If false, it evals after complete training."""
-
-    #now get network
-    Arg = {'network': None, 'n_class':7, 'in_channels':2, 'lower_in_channels':2, 'extractor_net':'resnet34'}
-    netfiles = Path("RESULTS", folder, network)
-    argfiles = list(netfiles.glob("*_args.txt"))
-    with open(argfiles[0], "r") as ft:
-        args = ft.read().splitlines()
-    tmpargs = [i.strip('--').split("=") for i in args if ('--' in i and '=' in i)]
-    chan1, whichin1 = getchn(args, 'in_chan')
-    chan2, whichin2 = getchn(args, 'lower_in_chan')
-    tmpargs += [['in_channels', chan1], ['lower_in_channels', chan2]] 
-    in3D = '--in3D' in args
-    args = dict(tmpargs)
-    
-    #overwrite if given in file:
-    Arg.update(args)
-    use_in2 = Arg['network']=='DeepMedic'
-    device = torch.device('cpu') #need speed now
-
-    net = getattr(Networks, Arg['network'])(Arg['in_channels'], Arg['n_class'], Arg['lower_in_channels'], Arg['extractor_net'], in3D)
-    net = net.float()
-    #now we can load learned params:
-    bestepfiles = list(netfiles.glob("*_bestepoch"))
-    path_to_net = bestepfiles[0] if best_ep else Path(netfiles, network)
-    loaded = torch.load(path_to_net, map_location=lambda storage, loc: storage)
-    net.load_state_dict(loaded['state_dict'])
-    net.eval()   
-    net = net.to(device)
-
-    #now do inference on entire subject simultaneously: but bcs of space limitations, needs cutting...
-    #frst check if we're in 2D or 3D and change folder accordingly:
-    data = torch.stack([torch.from_numpy(np.load(i1)).float() for i1 in subject], dim=0)
-    data = [data[:, whichin1, ...]]
-       
-    if use_in2:
-        subjekti2 = [Path(p.parents[1], 'in2', p.name) for p in subject]
-        in2 = torch.stack([torch.from_numpy(np.load(i2)).float() for i2 in subjekti2], dim=0)
-        data.append(in2[:, whichin2, ...])
-    
-    bigslice = 5
-    out = []
-    for start in range(0, len(data[0]), bigslice):
-        in_batch = [datum[start:start+bigslice, ...].to(device) for datum in data]
-       # print([i.shape for i in in_batch])
-        tmp = net(*in_batch).detach().cpu()
-        out.append(tmp)
-
-    return torch.cat(out) #concatenate so it's like one big batch. 
-
-def get3Ddice(PID, in3d, folder, network, best_ep=True):
-    """PID = PID of a subject to calculate 3D Dice on 
-        folder = results folder, from where your net will be loaded
-        network = which net to load and use for eval
-        best_ep = evaluate at best epoch? If false, it evals after complete training."""
-
-    if in3d:
-        subject = [i for i in Path('POEM_eval', 'TriD', 'in1').glob(f"*{PID}*.npy")]
-    else:
-        subject = [i for i in Path('POEM_eval', 'TwoD', 'in1').glob(f"*{PID}*.npy")]
-       
-    subject = sorted(subject)
-    #do inference to get batched output:
-    out = doInference(subject, folder, network, best_ep)
-
-    #calculate Dice:
-    if in3d:
-        gtpaths = sorted(list(Path('POEM_eval', 'GTs_3D').glob(f"*{PID}*.npy")))
-    else:
-        gtpaths = sorted(list(Path('POEM_eval', 'GTs_2D').glob(f"*{PID}*.npy")))
-    gt = [torch.from_numpy(np.load(i)) for i in gtpaths]
-    gt = torch.stack(gt)
-    
-   # print([[i.name, j.name] for i,j in zip(subject, gtpaths)])
-    gt, _ = CenterCropTensor3d(gt, out) #in case of deepmedic, gt should be cropped to out size
-    
-   # Dices = batchGDL(out.transpose(0,1), gt.transpose(0,1), binary=True) #DicePerClassBinary(out, gt) <-this avges over all patches... not cool
-    Dices, GDL = subjectDices(out, gt, binary=True)
-
-    return Dices, GDL
-
-def cutme(PID, patch, net, in3d):
-    return 0,0 
-
-def get3Ddice2(PID, patch, in3d, folder, network, best_ep=True):
-    """PID = PID of a subject to calculate 3D Dice on 
-        patch = sizes of pathes the training was done on (so eval is done the same way)
-        folder = results folder, from where your net will be loaded
-        network = which net to load and use for eval
-        best_ep = evaluate at best epoch? If false, it evals after complete training."""
-
-    #now we don't use precut data, instead cut subject on the fly
-    gt, subject = cutme(PID, patch, network, in3d=in3d)
-        
-    #do inference to get batched output:
-    out = doInference(subject, folder, network, best_ep)
-
-    #calculate Dice:
-    Dices, GDL = subjectDices(out, gt, binary=True)
-
-    return Dices, GDL 
-
-#%%
-
-def Calc3Ddices(PIDS, folder, in3d, network, best_ep=True):
-    """ folder = results folder, from where your net will be loaded
-        network = which net to load and use for eval
-        best_ep = evaluate at best epoch? If false, it evals after complete training."""
-    #hardcoded for now. Use only subjects from eval. 
-     
-    #pids from poem_eval:
- #   PIDS = ['500022', '500026', '500061', '500075', '500117', '500204', '500242', 
- #           '500268', '500288', '500291', '500316', '500346', '5000347', '500348', 
- #           '500354', '5000433', '5000487']
-    #poem25_3d:
-    #PIDS = ['500018', '500051', '500053', '500056', '500061', '500204', '500253',
-    #        '500280', '500281', '500304', '500346', '500354', '500357', '500395',
-    #        '500487']
-    #poem25:
-    PIDS = ['500026', '500061', '500075', '500117', '500242', '500268', '500288', '500291', 
-            '500316', '500346', '500347', '500348', '500354', '500433', '500487']
-    #poem25_2:
-    #PIDS = ['500017', '500062', '500159', '500179', '500204', '500242', '500281', '500297', 
-    #        '500304', '500316', '500318', '500321', '500347', '500354', '500433']
-    #poem80: 
-    #PIDS = ['500061', '500075', '500158', '500159', '500167', '500179', '500235', '500253', '500291', 
-    #        '500316', '500321', '500347', '500354', '500406', '500429']
-    #poem80_2: 
-    #PIDS = ['500018', '500051', '500053', '500056', '500062', '500117', '500167', '500241', '500280', 
-    #        '500297', '500318', '500357', '500379', '500429', '500487']
-
-
-    dices = []
-    pidsbar = tqdm(PIDS)
-    for pid in pidsbar:
-        #print(f"\nDoing PID {pid}...")
-        pidsbar.set_postfix({'Doing PID': pid})
-        ds, gdls = get3Ddice(pid, in3d, folder, network, best_ep)
-        dices.append(np.concatenate(([gdls.cpu().numpy()], ds.cpu().numpy())))
-
-    #save results in csv
-    zaDF = np.vstack(dices)
-    cols = ['GDL', 'Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
-    df = pd.DataFrame(zaDF, columns=cols, index=PIDS)
-
-    print(df)
-    
-    best_epoch=""
-    if best_ep:
-        best_epoch = "_BEST"
-    with open(f'POEM_eval_{folder}_{network}{best_epoch}.csv', 'w') as f:
-        df.to_csv(f)  #OBS if file exists, it will only append data. 
-    
-
-
-    
-# %%
-#twen = plotOutput('poem80_dts/deepmed_w/deepmed', 'POEM80_dts', '500061', take20=[71, 64, 55, 164, 43, 47])
-
-#%%
-PIDS = ['500018', '500051', '500053', '500056', '500061', '500204', '500253','500280', '500281', '500304', '500346', '500354', '500357', '500395','500487']
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet_dts')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet_dts')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed_dts')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet_dts', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet_dts', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed_dts', False)

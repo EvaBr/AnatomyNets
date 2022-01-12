@@ -8,7 +8,7 @@ import re
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from scipy.ndimage import distance_transform_edt as dt_edt
-from helpers import get_one_hot, flatten_one_hot
+from helpers import get_one_hot, flatten_one_hot, getpid
 
 
 #%%
@@ -132,7 +132,7 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
     slicing = ":,"*sliced + "slajs" + ",:"*(2-sliced) + "]"  
     print(f"\nSLICING: [{slicing}\n")
     for w,f,g,dx,dy,m in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths, mask_paths):
-        PIDs = [re.findall(r"500[0-9]+", ppp)[0] for ppp in [w,f,g,dx,dy,m]]
+        PIDs = [getpid(ppp) for ppp in [w,f,g,dx,dy,m]]
         assert len(np.unique(PIDs)) == 1
         PID = PIDs[0]
         print(f"Slicing nr {PID}...")
@@ -275,7 +275,7 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
     patch = patch_size//2
  
     for w,f,g,dx,dy,m in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths, mask_paths):
-        PIDs = [re.findall(r"500[0-9]+", ppp)[0] for ppp in [w,f,g,dx,dy,m]]
+        PIDs = [getpid(ppp) for ppp in [w,f,g,dx,dy,m]]
         assert len(np.unique(PIDs)) == 1
         PID = PIDs[0]
         print(f"Slicing nr {PID}...")
@@ -409,7 +409,7 @@ def cutPOEMslices():
     dty_paths.sort()
    
     for w,f,g,dx,dy in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths):
-        PID = re.findall(r"500[0-9]+", w)[0]
+        PID = getpid(w)
         print(f"Slicing nr {PID}...")
         wat = nib.load(w).get_fdata()
         fat = nib.load(f).get_fdata()
@@ -457,8 +457,8 @@ def train_val_splitPOEM(datafolder, val_subjects = 15):
     #find all pids that should be in TRAIN atm
     all_paths = [p for p in pathlib.Path(datafolder).glob("**/*.npy")]
     
-    pids = np.random.choice(np.unique([re.findall(r"500[0-9]+", fil.name)[0] for fil in all_paths]), size=val_subjects, replace=False)
-    to_move = [fil for fil in all_paths if re.findall(r"500[0-9]+", fil.name)[0] in pids]
+    pids = np.random.choice(np.unique([getpid(fil.name) for fil in all_paths]), size=val_subjects, replace=False)
+    to_move = [fil for fil in all_paths if getpid(fil.name) in pids]
     for fil in to_move:
         fil.replace(pathlib.Path(re.sub("TRAIN", "VAL", str(fil))))
 
@@ -497,12 +497,13 @@ def remove_bckg_slices(datafolder):
 
 # %%
 
-def cutEval():
+def cutEval(patch_size, pid_list=None):
+    """patch_Size = how big patches to cut.
+       pid_list = which subjs to cut. If None, all are cut."""
+
+    #patch_size = 50
     outpath2 = pathlib.Path('POEM_eval', 'TwoD')
     outpath3 = pathlib.Path('POEM_eval', 'TriD')
-    patch_size = 50
-    batch_size2 = 8
-    batch_size3 = 5
     GTs2 = pathlib.Path('POEM_eval', 'GTs_2D')
     GTs3 = pathlib.Path('POEM_eval', 'GTs_3D')
     GTs2.mkdir(parents=True, exist_ok=True)
@@ -510,6 +511,24 @@ def cutEval():
     for i in ['in1','in2']:
         pathlib.Path(outpath2, i).mkdir(parents=True, exist_ok=True)
         pathlib.Path(outpath3, i).mkdir(parents=True, exist_ok=True)
+
+    #check if everything already exists, to not cut twice:
+    
+    if pid_list==None: #set it to all available pids
+        pid_list = [getpid(filli) for filli in glob("POEM/segms/CroppedSegmNew*")]
+    existing_pid_list = [getpid(filli) for filli in glob("POEM_eval/GTs_2D/*")]
+    allfilesexist = len(set(pid_list).union(set(existing_pid_list))) == len(pid_list)
+    exists = pathlib.Path('POEM_eval', f'size{patch_size}.txt').is_file()
+    if exists and allfilesexist: #everything exists, do not recut
+        print('Files already exist. Cutting stopped.')
+        return None
+    
+    #otherwise remove all existing files. Unles only a few/irrelevant ones exist but are of correct size.
+    if not exists:
+        for filename in pathlib.Path("POEM_eval").rglob("s*.[nt][xp][yt]"):
+            filename.unlink()
+    
+
 
     #POEM SLICING
     #gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
@@ -519,13 +538,14 @@ def cutEval():
     #dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
     #mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
 
-    gt_paths = glob("POEM/segms/CroppedSegmNew*")
-    wat_paths = glob("POEM/watfat/cropped*_wat*")
-    fat_paths = glob("POEM/watfat/cropped*_fat*")
-    dtx_paths = glob("POEM/distmaps/*x.nii")
-    dty_paths = glob("POEM/distmaps/*y.nii")
-    mask_paths = glob("POEM/masks/cropped*_mask.nii")
-   
+    gt_paths = [g for g in glob("POEM/segms/CroppedSegmNew*") if getpid(g) in pid_list]
+    wat_paths = [g for g in glob("POEM/watfat/cropped*_wat*") if getpid(g) in pid_list]
+    fat_paths = [g for g in glob("POEM/watfat/cropped*_fat*") if getpid(g) in pid_list]
+    dtx_paths = [g for g in glob("POEM/distmaps/*x.nii") if getpid(g) in pid_list]
+    dty_paths = [g for g in glob("POEM/distmaps/*y.nii") if getpid(g) in pid_list]
+    mask_paths = [g for g in glob("POEM/masks/cropped*_mask.nii") if getpid(g) in pid_list]
+
+
     gt_paths.sort()
     wat_paths.sort()
     fat_paths.sort()
@@ -539,15 +559,12 @@ def cutEval():
 
     nb_class = 7
 
-    PIDS = ['500022', '500204'] #['500026', '500061', '500075', '500117', '500242', '500268', '500288', '500291', 
-            #'500316', '500346', '500347', '500348', '500354', '500433', '500487']
     
     for w,f,g,dx,dy,m in zip(wat_paths, fat_paths, gt_paths, dtx_paths, dty_paths, mask_paths):
-        PIDs = [re.findall(r"500[0-9]+", ppp)[0] for ppp in [w,f,g,dx,dy,m]]
-        assert len(np.unique(PIDs)) == 1
+        PIDs = [getpid(ppp) for ppp in [w,f,g,dx,dy,m]]
+        assert len(np.unique(PIDs)) == 1 #check that all paths lead to same subj
         PID = PIDs[0]
-        if PID not in PIDS:
-            continue
+        
         print(f"Slicing nr {PID}...")
         wat = nib.load(w).get_fdata()
         fat = nib.load(f).get_fdata()
@@ -600,7 +617,7 @@ def cutEval():
                     np.save(pathlib.Path(outpath3, 'in2', f"subj{PID}_{i}_{j}_{k}.npy"), 
                             tmp_in2)
                     np.save(pathlib.Path(GTs3, f"subj{PID}_{i}_{j}_{k}.npy"), tmp_gt)
-
+    return None
             
         
 

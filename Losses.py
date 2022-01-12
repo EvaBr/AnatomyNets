@@ -185,7 +185,7 @@ def subjectDices(probs: Tensor, target: Tensor, binary: bool = False):
     tc = target.type(torch.float32)
 
     intersection: Tensor = einsum("bcwh...,bcwh...->c", pc, tc)
-    union: Tensor = einsum("bcwh...->c", pc) + einsum("bcwh...->c", tc) #ne bo nikoli 0. zmeri bo == numel. 
+    union: Tensor = einsum("bcwh...->c", pc) + einsum("bcwh...->c", tc) #ne bo nikoli 0. zmeri bo vsaj == numel.Ker vsi klasi obstajajo. 
 
     divided: Tensor = 2*intersection / union
     GDL: Tensor = 2*intersection.sum() / union.sum()

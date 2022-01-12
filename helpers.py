@@ -1,5 +1,10 @@
 import numpy as np
 import torch
+import re
+
+def getpid(filnamn):
+    found = re.findall(r'500[0-9]+', filnamn) + [None]
+    return found[0]
 
 def get_one_hot(gt, nb_class):
     gt = gt.astype('int')
