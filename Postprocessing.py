@@ -8,7 +8,7 @@ from glob import glob
 from helpers import flatten_one_hot, get_one_hot, CenterCropTensor, CenterCropTensor3d
 from Losses import subjectDices
 import nibabel as nib
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union
 from scipy.ndimage import distance_transform_edt as dt_edt
 from slicer import Slicer
 
@@ -106,29 +106,28 @@ def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndar
     return allin*maska, gt[:, startx:endx, starty:endy, startz:endz], maska
     
 
-
-def Compute3DDice(pid:int, netparams:str, patchsize:int, 
-            batch:int = 10, bydim:int = 1, doeval:bool = True, dev:str = 'cpu', step:int=0) -> List[float]:
+#%%
+def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int, 
+            batch:int = 10, bydim:int = 1, doeval:bool = True, 
+            dev:str = 'cpu', step:int=0, saveout:bool=False) -> List[float]:
     #OBS: in case of deepmed, patchsize means the size of output patch!
     #(i.e. if patchsize=9, the input to network will be 25x25)
     #step = in what steps you take patches. if ==0, you take nonoverlapping ones. if K, patch starts 
     # at prev_patch_start+K.
+    #saveout = whether we save the ful subject output. (for viewing and debugging)
 
     # GET NET:
     net, in1, in2, in3D = getNetwork(netparams, dev)
     if doeval:
         net.eval()
     device = torch.device(dev)
-    # LOAD DATA:
-    allin, gt, mask = loadSubject(pid, patchsize//2)
-    
+    print('Net loaded.')
     # CUT AND EVAL: loop through cutting smaller pieces, moving to torch and eval
-    segmented = np.zeros((1,7))
-    existing = np.zeros((1,7))
-    intersec = np.zeros((1,7)) #these three needed to gather results, for post dice compute
+    segmented = torch.zeros((1,7), device=dev)
+    existing = torch.zeros((1,7), device=dev)
+    intersec = torch.zeros((1,7), device=dev) #these three needed to gather results, for post dice compute
+    Dices = torch.zeros((len(PID), 7), device=dev)
     axes = [0,2,3] + ([4] if in3D else [])
-
-    size_full = allin[0].shape #shape of 3d img, one channel
 
     #set the right function to use
     TensorCropping = CenterCropTensor3d
@@ -144,53 +143,77 @@ def Compute3DDice(pid:int, netparams:str, patchsize:int,
         padding[bydim+1] = (0,0)
         paddingall[bydim+1] = (0,0)
         TensorCropping = CenterCropTensor
+
+    # LOAD DATA:
+    if isinstance(PID, int): PID=[PID]
+    for idx, pid in enumerate(PID):
+        #set accumulators to 0:
+        segmented.zero_()
+        existing.zero_()
+        intersec.zero_()
+
+        allin, gt, mask = loadSubject(pid, patchsize//2)
     
-    mask = np.pad(mask, padding[1:], mode='constant')
-    gt = np.pad(gt, padding, mode='constant')
-    allin = np.pad(allin, paddingall, mode='constant')
+        size_full = allin[0].shape #shape of 3d img, one channel
     
-    slicer = Slicer(size_full, patchsize, in1, in2, in3D, bydim, step) #return string slice, include all channels
-    # for cutting out the middle part based on step:
-    #slice((sf-step)//2, sf-np.ceil((sf-step)/2))
-    slicing = "".join([f'.narrow({idx}, {(patchsize-step)//2}, {step})' for idx in range(2,(4+in3D))]) if step>0 else ""
-    with torch.no_grad():
-        while slicer.todo>0:
-            gtslices, in1slices, in2slices =  slicer.get_batch(batch) #multiple slices
+        mask = np.pad(mask, padding[1:], mode='constant')
+        gt = np.pad(gt, padding, mode='constant')
+        allin = np.pad(allin, paddingall, mode='constant')
+
+        empty_subj = torch.zeros(allin.shape[1:]) #cause we dont need channels
+    
+        slicer = Slicer(size_full, patchsize, in1, in2, in3D, bydim, step) #return string slice, include all channels
+        # for cutting out the middle part based on step:
+        #slice((sf-step)//2, sf-np.ceil((sf-step)/2))
+        slicing = "".join([f'.narrow({idx}, {(patchsize-step)//2}, {step})' for idx in range(2,(4+in3D))]) if step>0 else ""
+        print(f'Eval on subj{pid}...')
+        with torch.no_grad():
+            while slicer.todo>0:
+                gtslices, in1slices, in2slices =  slicer.get_batch(batch) #multiple slices
         
-            gts = np.stack(list(map(eval, [f'gt[{slajs}]' for slajs in gtslices])), axis=0)
-            in1s = np.stack(list(map(eval, [f'allin[{slajs}]' for slajs in in1slices])), axis=0)
-            #maske = np.stack([eval(f'mask[{slajs[2:]}]') for slajs in gtslices], axis=0)
-            maske = np.stack(list(map(eval, [f'mask[{slajs[2:]}]' for slajs in gtslices])), axis=0)
+                gts = np.stack(list(map(eval, [f'gt[{slajs}]' for slajs in gtslices])), axis=0)
+                in1s = np.stack(list(map(eval, [f'allin[{slajs}]' for slajs in in1slices])), axis=0)
+                #maske = np.stack([eval(f'mask[{slajs[2:]}]') for slajs in gtslices], axis=0)
+                maske = np.stack(list(map(eval, [f'mask[{slajs[2:]}]' for slajs in gtslices])), axis=0)
             
-            # move to torch:
-            target_oh = torch.from_numpy(gts).squeeze().to(device)
-            data = [torch.from_numpy(in1s).squeeze().float().to(device)] #input 1
-            if in2:
-                #in2s = np.stack([eval(f'allin[{slajs}]') for slajs in in2slices], axis=0)
-                in2s = np.stack(list(map(eval, [f'allin[{slajs}]' for slajs in in2slices])), axis=0)
-                data.append(torch.from_numpy(in2s).squeeze().float().to(device)) #input 2
+                # move to torch:
+                target_oh = torch.from_numpy(gts).squeeze().to(device)
+                data = [torch.from_numpy(in1s).squeeze().float().to(device)] #input 1
+                if in2:
+                    #in2s = np.stack([eval(f'allin[{slajs}]') for slajs in in2slices], axis=0)
+                    in2s = np.stack(list(map(eval, [f'allin[{slajs}]' for slajs in in2slices])), axis=0)
+                    data.append(torch.from_numpy(in2s).squeeze().float().to(device)) #input 2
     
-            #run net on data. get output, save sums in dice gather lists
-            out = net(*data).exp()
-            target_oh, out = TensorCropping(target_oh, out) #in case of PSP net, might be that output is bigger than input/GT
-            #dices = AllDices(out, target_oh)
-            maske = torch.from_numpy(maske).squeeze().unsqueeze(1).float().to(device)
+                #run net on data. get output, save sums in dice gather lists
+                out = net(*data).exp()
+                target_oh, out = TensorCropping(target_oh, out) #in case of PSP net, might be that output is bigger than input/GT
+                #dices = AllDices(out, target_oh)
+                maske = torch.from_numpy(maske).squeeze().unsqueeze(1).float().to(device)
+                
+                #save output if required
+                if saveout: #whats faster, simply saving to an existing tensor, or iffing every loop??
+                    for idd, slajs in gtslices:
+                        eval(f'empty_subj[{slajs}] = torch.argmax(out[idd,...], dim=0)')
 
-            #cut only the middle part of OUT, MASKE and TARGET_OH for eval (depending on the step size)
-            maske = eval('maske'+slicing)
-            target_oh = eval('target_oh'+slicing)
-            out = eval('out'+slicing)
+                #cut only the middle part of OUT, MASKE and TARGET_OH for eval (depending on the step size)
+                maske = eval('maske'+slicing)
+                target_oh = eval('target_oh'+slicing)
+                out = eval('out'+slicing)
 
-            #when summing up, use only the middle of the patches. Depending on how big 'step' was. 
-            segmented += torch.sum(out*maske, axis=axes).cpu().numpy() 
-            existing += torch.sum(target_oh*maske, axis=axes).cpu().numpy()
-            intersec += torch.sum(target_oh*maske*out, axis=axes).cpu().numpy()
-            #TODO: save sums in segmented, existing, intersec. Also use mask? (then it needs cutting!!)
+                #when summing up, use only the middle of the patches. Depending on how big 'step' was. 
+                segmented += torch.sum(out*maske, axis=axes)
+                existing += torch.sum(target_oh*maske, axis=axes)
+                intersec += torch.sum(target_oh*maske*out, axis=axes)
+                #TODO: save sums in segmented, existing, intersec. Also use mask? (then it needs cutting!!)
     
-    #all saved, now calc actual dices:
-    Dices = 2*intersec/(existing+segmented) #calc dice from the gathering lists
+        #all saved, now calc actual dices:
+        Dices[idx, :] = 2*intersec/(existing+segmented) #calc dice from the gathering lists
+        if saveout:
+            #save img as npy.
+            np.save(f'out{pid}.npy', empty_subj.cpu().numpy())
 
-    return Dices
+    print('Done.')
+    return Dices.cpu().numpy()
 
 
 

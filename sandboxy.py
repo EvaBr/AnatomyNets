@@ -12,12 +12,12 @@ from Postprocessing import Compute3DDice
 #Compute3DDice(500017,'poem25_new/unet_dts/unet_dts',25, dev='cuda', step=2)
 
 #%%
-Compute3DDice('500062', 'poem25/deepmed1/deepmed', 25, batch=20, step=3, dev='cuda')
-Compute3DDice('500062', 'poem25/deepmed_dts1/deepmed', 25, batch=20, step=3, dev='cuda')
-Compute3DDice('500062', 'poem25/pnet1/pnet', 25, batch=20, step=3, dev='cuda')
-Compute3DDice('500062', 'poem25/pnet_dts1/pnet', 25, batch=20, step=3, dev='cuda')
-Compute3DDice('500062', 'poem25/unet1/unet', 25, batch=20, step=3, dev='cuda')
-Compute3DDice('500062', 'poem25/unet_dts1/unet', 25, batch=20, step=3, dev='cuda')
+print(Compute3DDice('500062', 'poem25/deepmed1/deepmed', 25, batch=20, step=3, dev='cuda'))
+print(Compute3DDice('500062', 'poem25/deepmed_dts1/deepmed', 25, batch=20, step=3, dev='cuda'))
+print(Compute3DDice('500062', 'poem25/pnet1/pnet', 25, batch=20, step=3, dev='cuda'))
+print(Compute3DDice('500062', 'poem25/pnet_dts1/pnet', 25, batch=20, step=3, dev='cuda'))
+print(Compute3DDice('500062', 'poem25/unet1/unet', 25, batch=20, step=3, dev='cuda'))
+print(Compute3DDice('500062', 'poem25/unet_dts1/unet', 25, batch=20, step=3, dev='cuda'))
 
 
 #%%
