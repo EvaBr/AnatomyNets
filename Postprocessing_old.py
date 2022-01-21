@@ -11,16 +11,24 @@ import matplotlib
 import random
 from Losses import DicePerClass, AllDices, DicePerClassBinary, batchGDL, subjectDices
 from Slicing import cutEval
+from pathlib import Path
 #matplotlib.use('Agg')
 
 
 
 
-def compare_curves(list_of_names, plot_names = None, individ_Dices = [0,1,2,3,4,5,6]):
+def compare_curves(result_folder, list_of_names, plot_names = None, individ_Dices = [0,1,2,3,4,5,6]):
+    """result folder = npr poem25
+        list_of_names = ktere vse bi plotal iz te mape, recimo deepmed_dts2, deepmed3d...
+        plot_names = kako jih imenovat v plotu. If none, reuse list_of_names
+        individ_dices = which individual dices to plot the curves for (if empty, plots only GDL and Loss"""
+
     if plot_names==None:
         plot_names = list_of_names
     #read in metrics
-    metrics = {plotname: pd.read_csv(f"RESULTS/{name}.csv") for plotname,name in zip(plot_names, list_of_names)}
+    pot = Path('RESULTS', result_folder)
+    #metrics = {plotname: pd.read_csv(f"RESULTS/{name}.csv") for plotname,name in zip(plot_names, list_of_names)}
+    metrics = {plotname: pd.read_csv(list(Path(pot, name).rglob('*.csv'))[0]) for plotname,name in zip(plot_names, list_of_names)}
     Dice_names = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
     to_plot = ['Loss'] + [Dice_names[i] for i in individ_Dices]
 

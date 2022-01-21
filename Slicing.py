@@ -101,7 +101,7 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
     outpath = f"{outpath}/TRAIN"
     pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
     for i in ['gt','in1','in2']:
-        pathlib.Path(f"{outpath}/{i}").mkdir(parents=True, exist_ok=True)
+        pathlib.Path(outpath,i).mkdir(parents=True, exist_ok=True)
 
     #POEM SLICING
     #gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
@@ -156,7 +156,7 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
 
         inx = wat.shape[1-(sliced>0)]//patch_size
         iny = wat.shape[2-(sliced==2)]//patch_size
-        to_cut = 2 #max(4, inx*iny)
+        to_cut = 2 #min(4, inx*iny)
 
         dict_tmp = {}
 
@@ -185,13 +185,13 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
             
         for slajs, indexes in tqdm( dict_tmp.items() ):
 
-            wat_tmp = np.pad(np.squeeze(eval(f"wat[{slicing}")),(patch+16,))
-            fat_tmp = np.pad(np.squeeze(eval(f"fat[{slicing}")),(patch+16,))
-            gt_tmp = np.pad(np.squeeze(eval(f"gt[:,{slicing}")),((0,0), (patch+16,patch+16), (patch+16,patch+16)))
-            x_tmp = np.pad(np.squeeze(eval(f"x[{slicing}")),(patch+16,))
-            y_tmp = np.pad(np.squeeze(eval(f"y[{slicing}")),(patch+16,))
-            z_tmp = np.pad(np.squeeze(eval(f"z[{slicing}")),(patch+16,))
-            bd_tmp = np.pad(np.squeeze(eval(f"bd[{slicing}")),(patch+16,))
+            wat_tmp = np.pad(np.squeeze(eval(f"wat[{slicing}")),(patch+16,),mode='constant')
+            fat_tmp = np.pad(np.squeeze(eval(f"fat[{slicing}")),(patch+16,),mode='constant')
+            gt_tmp = np.pad(np.squeeze(eval(f"gt[:,{slicing}")),((0,0), (patch+16,patch+16), (patch+16,patch+16)),mode='constant')
+            x_tmp = np.pad(np.squeeze(eval(f"x[{slicing}")),(patch+16,),mode='constant')
+            y_tmp = np.pad(np.squeeze(eval(f"y[{slicing}")),(patch+16,),mode='constant')
+            z_tmp = np.pad(np.squeeze(eval(f"z[{slicing}")),(patch+16,),mode='constant')
+            bd_tmp = np.pad(np.squeeze(eval(f"bd[{slicing}")),(patch+16,),mode='constant')
 
             for counter,index in enumerate(indexes):
                 startx = index[0]+16
@@ -248,19 +248,19 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
         pathlib.Path(outpath,i).mkdir(parents=True, exist_ok=True)
 
     #POEM SLICING
-    gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
-    wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
-    fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
-    dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
-    dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
-    mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
+    #gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
+    #wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
+    #fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
+    #dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
+    #dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
+    #mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
 
-    #gt_paths = glob("POEM/segms/CroppedSegmNew*")
-    #wat_paths = glob("POEM/watfat/cropped*_wat*")
-    #fat_paths = glob("POEM/watfat/cropped*_fat*")
-    #dtx_paths = glob("POEM/distmaps/*x.nii")
-    #dty_paths = glob("POEM/distmaps/*y.nii")
-    #mask_paths = glob("POEM/masks/cropped*_mask.nii")
+    gt_paths = glob("POEM/segms/CroppedSegmNew*")
+    wat_paths = glob("POEM/watfat/cropped*_wat*")
+    fat_paths = glob("POEM/watfat/cropped*_fat*")
+    dtx_paths = glob("POEM/distmaps/*x.nii")
+    dty_paths = glob("POEM/distmaps/*y.nii")
+    mask_paths = glob("POEM/masks/cropped*_mask.nii")
 
 
     gt_paths.sort()
@@ -323,13 +323,13 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
                 
                 
                
-        wat_tmp = np.pad(wat,(patch+16,))
-        fat_tmp = np.pad(fat,(patch+16,))
-        gt_tmp = np.pad(gt,((0,0), (patch+16,patch+16), (patch+16,patch+16),(patch+16,patch+16)))
-        x_tmp = np.pad(x,(patch+16,))
-        y_tmp = np.pad(y,(patch+16,))
-        z_tmp = np.pad(z,(patch+16,))
-        bd_tmp = np.pad(bd,(patch+16,))
+        wat_tmp = np.pad(wat,(patch+16,),mode='constant')
+        fat_tmp = np.pad(fat,(patch+16,),mode='constant')
+        gt_tmp = np.pad(gt,((0,0), (patch+16,patch+16), (patch+16,patch+16),(patch+16,patch+16)),mode='constant')
+        x_tmp = np.pad(x,(patch+16,),mode='constant')
+        y_tmp = np.pad(y,(patch+16,),mode='constant')
+        z_tmp = np.pad(z,(patch+16,),mode='constant')
+        bd_tmp = np.pad(bd,(patch+16,),mode='constant')
 
         for idx, center in tqdm( enumerate(kjeso) ):
             startx = center[0]+16
@@ -440,7 +440,7 @@ def cutPOEMslices():
 
 ############################  POSTPROCESS CUTS  #########################
 #(works independent of dimensions!!)
-def train_val_splitPOEM(datafolder, val_subjects = 15):
+def train_val_splitPOEM(datafolder, to_move=[], val_subjects = 15):
     #randomly chooses val_subject pids, and moves corresponding patches to VAL datafolder. 
     #check first if TRAIN exists:
     if not pathlib.Path(datafolder, "TRAIN").exists():
@@ -454,13 +454,24 @@ def train_val_splitPOEM(datafolder, val_subjects = 15):
     for i in ['gt','in1','in2']:
         pathlib.Path(f"{outpath}/{i}").mkdir(parents=True, exist_ok=True)
 
+
     #find all pids that should be in TRAIN atm
     all_paths = [p for p in pathlib.Path(datafolder).glob("**/*.npy")]
+    if len(to_move)==0:
+        #we choose them randomly: 
+        pids = np.random.choice(np.unique([getpid(fil.name) for fil in all_paths]), size=val_subjects, replace=False)
+    elif isinstance(to_move[0],int) or isinstance(to_move[0], str):
+        #assume we got a list of pids 
+        pids = [str(t) for t in to_move]
+    else:
+        raise "Error: wrong type in to_move!"
     
-    pids = np.random.choice(np.unique([getpid(fil.name) for fil in all_paths]), size=val_subjects, replace=False)
     to_move = [fil for fil in all_paths if getpid(fil.name) in pids]
+
     for fil in to_move:
         fil.replace(pathlib.Path(re.sub("TRAIN", "VAL", str(fil))))
+    
+    return pids
 
 
 
