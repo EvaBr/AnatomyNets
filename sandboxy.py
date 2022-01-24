@@ -45,10 +45,13 @@ Compute3DDice(500062, 'poem25/unet_dts3d/unet', 25, batch=10, step=3, dev='cuda'
 
 #%%
 #check how it looks
-fajl = 'dm1dts'
+fajl = 'dm1'
 fil = 'out500022_'+fajl+'.npy'
 #which slices to plot:
-s1,s2,s3 = (150,50,50)
+s1,s2,s3 = (140,30,60)
+bydim = 1 #set to 0 when in 3d
+patchsize=25
+step=3
 
 img = np.load(fil)
 
@@ -65,14 +68,33 @@ plt.axis('off')
 
 gt = list(Path('POEM', 'segms').glob(f'Cropped*{fil[3:9]}*'))[0]
 gt = nib.load(str(gt)).get_fdata()
+mask = list(Path('POEM', 'masks').glob(f'cropped*{fil[3:9]}*'))[0]
+mask = nib.load(str(mask)).get_fdata()
+
+leavebckg = patchsize//2
+x, y, z = mask.shape
+tmp = mask.sum(axis=(0,1))
+startz, endz = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+tmp = mask.sum(axis=(1,2))
+startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+tmp = mask.sum(axis=(0,2))
+starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+startx = max(0, startx-leavebckg) 
+starty = max(0, starty-leavebckg*(bydim!=1)) 
+startz = max(0, startz-leavebckg*(bydim!=2)) 
+endx = min(x, endx+leavebckg+1+2*patchsize)
+endy = min(y, endy+leavebckg+1+2*patchsize*(bydim!=1))
+endz = min(z, endz+leavebckg+1+2*patchsize*(bydim!=2))
+gt = gt[startx:endx, starty:endy, startz:endz]
+
 plt.subplot(2,3,4)
-plt.imshow(gt[:,:,-s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
+plt.imshow(gt[:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
 plt.axis('off')
 plt.subplot(2,3,5)
-plt.imshow(gt[:,-s2,:].squeeze(), vmin=0, vmax=7)
+plt.imshow(gt[:,s2,:].squeeze(), vmin=0, vmax=7)
 plt.axis('off')
 plt.subplot(2,3,6)
-plt.imshow(gt[-s1,:,:].squeeze(), extent=(0,100,0,150), vmin=0, vmax=7)
+plt.imshow(gt[s1,:,:].squeeze(), extent=(0,100,0,150), vmin=0, vmax=7)
 plt.axis('off')
 
 # %%
