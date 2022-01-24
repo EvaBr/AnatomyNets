@@ -29,18 +29,18 @@ class DoubleConv(nn.Module):
         if TriD:
             self.block = nn.Sequential(
                 nn.Conv3d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
-                nn.BatchNorm3d(out_channels, track_running_stats=False),
+                nn.BatchNorm3d(out_channels), #, track_running_stats=False),
                 nn.PReLU(), #(P)relu?
                 nn.Conv3d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
-                nn.BatchNorm3d(out_channels, track_running_stats=False),
+                nn.BatchNorm3d(out_channels), #, track_running_stats=False),
             )
         else:
             self.block = nn.Sequential(
                 nn.Conv2d(in_channels, mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, dilation=dilation, bias=False), #change padding?
-                nn.BatchNorm2d(out_channels, track_running_stats=False),
+                nn.BatchNorm2d(out_channels), #, track_running_stats=False),
                 nn.PReLU(), #(P)relu?
                 nn.Conv2d(mid_channels, out_channels, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=False),
-                nn.BatchNorm2d(out_channels, track_running_stats=False),
+                nn.BatchNorm2d(out_channels), #, track_running_stats=False),
             )
         self.act = nn.PReLU()
     
@@ -466,8 +466,9 @@ class DilatedResNet(nn.Module):
 #################loading pretrained nets
 
 def load_weights_sequential(target, source_state):
-    model_to_load= {k: v for k, v in source_state.items() if k in target.state_dict().keys()}
-    target.load_state_dict(model_to_load)
+    #model_to_load= {k: v for k, v in source_state.items() if k in target.state_dict().keys()}
+    #target.load_state_dict(model_to_load, strict=False) #the strict thingie does the same!
+    target.load_state_dict(source_state, strict=False) #the strict thingie does the same!
 
 
 def resnet18(pretrained=True):

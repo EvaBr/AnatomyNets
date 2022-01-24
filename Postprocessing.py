@@ -11,7 +11,7 @@ import nibabel as nib
 from typing import List, Tuple, Dict, Any, Union
 from scipy.ndimage import distance_transform_edt as dt_edt
 from slicer import Slicer
-
+#%%
 
 
 def getchn(args: List[str], string:str) -> Tuple[int, List[int]]:
@@ -109,9 +109,9 @@ def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndar
 #%%
 def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int, 
             batch:int = 10, bydim:int = 1, doeval:bool = True, 
-            dev:str = 'cpu', step:int=0, saveout:bool=False) -> List[float]:
+            dev:str = 'cpu', step:int=0, saveout:bool=False, savename:str='x') -> List[float]:
     #OBS: in case of deepmed, patchsize means the size of output patch!
-    #(i.e. if patchsize=9, the input to network will be 25x25)
+    #(i.e. if patchsize=9, the input to network will be 25x25) <-but this done in the code
     #step = in what steps you take patches. if ==0, you take nonoverlapping ones. if K, patch starts 
     # at prev_patch_start+K.
     #saveout = whether we save the ful subject output. (for viewing and debugging)
@@ -120,9 +120,13 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
     net, in1, in2, in3D = getNetwork(netparams, dev)
     if doeval:
         net.eval()
+    else:
+        net.train()
     device = torch.device(dev)
     print('Net loaded.')
     # CUT AND EVAL: loop through cutting smaller pieces, moving to torch and eval
+    if isinstance(PID, int): 
+        PID=[PID]
     segmented = torch.zeros((1,7), device=dev)
     existing = torch.zeros((1,7), device=dev)
     intersec = torch.zeros((1,7), device=dev) #these three needed to gather results, for post dice compute
@@ -145,7 +149,6 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
         TensorCropping = CenterCropTensor
 
     # LOAD DATA:
-    if isinstance(PID, int): PID=[PID]
     for idx, pid in enumerate(PID):
         #set accumulators to 0:
         segmented.zero_()
@@ -159,13 +162,17 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
         mask = np.pad(mask, padding[1:], mode='constant')
         gt = np.pad(gt, padding, mode='constant')
         allin = np.pad(allin, paddingall, mode='constant')
-
-        empty_subj = torch.zeros(allin.shape[1:]) #cause we dont need channels
-    
+        print((size_full, gt.shape))
+        empty_subj = torch.zeros(gt.shape[1:]) #allin.shape[1:]) #cause we dont need channels
+        
         slicer = Slicer(size_full, patchsize, in1, in2, in3D, bydim, step) #return string slice, include all channels
         # for cutting out the middle part based on step:
         #slice((sf-step)//2, sf-np.ceil((sf-step)/2))
         slicing = "".join([f'.narrow({idx}, {(patchsize-step)//2}, {step})' for idx in range(2,(4+in3D))]) if step>0 else ""
+        paddingup = [0,patchsize-step]*3
+        if not in3D:
+            paddingup[-1-bydim*2] = 0
+
         print(f'Eval on subj{pid}...')
         with torch.no_grad():
             while slicer.todo>0:
@@ -190,11 +197,7 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
                 #dices = AllDices(out, target_oh)
                 maske = torch.from_numpy(maske).squeeze().unsqueeze(1).float().to(device)
                 
-                #save output if required
-                if saveout: #whats faster, simply saving to an existing tensor, or iffing every loop??
-                    for idd, slajs in gtslices:
-                        eval(f'empty_subj[{slajs}] = torch.argmax(out[idd,...], dim=0)')
-
+                
                 #cut only the middle part of OUT, MASKE and TARGET_OH for eval (depending on the step size)
                 maske = eval('maske'+slicing)
                 target_oh = eval('target_oh'+slicing)
@@ -204,16 +207,29 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
                 segmented += torch.sum(out*maske, axis=axes)
                 existing += torch.sum(target_oh*maske, axis=axes)
                 intersec += torch.sum(target_oh*maske*out, axis=axes)
-                #TODO: save sums in segmented, existing, intersec. Also use mask? (then it needs cutting!!)
-    
+
+                #save output if required
+                if saveout: #whats faster, simply saving to an existing tensor, or iffing every loop??
+                    for idd, slajs in enumerate(gtslices):
+                        tmp = torch.argmax(out[idd,...], dim=0)
+                        if not in3D:
+                            tmp = tmp.unsqueeze(bydim)
+                       # print(tmp.shape)
+                        tmp = torch.nn.functional.pad(tmp, paddingup)
+                        eval(f'empty_subj[{slajs[2:]}].copy_(tmp)')
+
+                
         #all saved, now calc actual dices:
         Dices[idx, :] = 2*intersec/(existing+segmented) #calc dice from the gathering lists
         if saveout:
             #save img as npy.
-            np.save(f'out{pid}.npy', empty_subj.cpu().numpy())
+            np.save(f'out{pid}_{savename}.npy', empty_subj.cpu().numpy())
 
     print('Done.')
-    return Dices.cpu().numpy()
+    #pidis = [int(p) for p in PIDS]
+    dices = np.concatenate((np.array(PID)[:,None], Dices.cpu().numpy()), axis=1)
+    np.save(f'dices_{savename}.npy', dices)
+    return dices
 
 
 

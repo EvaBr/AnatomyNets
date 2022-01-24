@@ -633,3 +633,6 @@ def cutEval(patch_size, pid_list=None):
         
 
 # %%
+#cutPOEM2D(50, 'POEM50', sampling=[5, 3, 4, 3, 5, 4, 4])
+#cutPOEM2D(50, 'POEM50_2', sliced=2,sampling=[5, 3, 4, 3, 5, 4, 4])
+#cutPOEM3D(50, 'POEM50_3D', sampling=[5,3,4,3,5,4,4])
