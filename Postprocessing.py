@@ -162,7 +162,7 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
         mask = np.pad(mask, padding[1:], mode='constant')
         gt = np.pad(gt, padding, mode='constant')
         allin = np.pad(allin, paddingall, mode='constant')
-        print((size_full, gt.shape))
+      #  print((size_full, gt.shape))
         empty_subj = torch.zeros(gt.shape[1:]) #allin.shape[1:]) #cause we dont need channels
         
         slicer = Slicer(size_full, patchsize, in1, in2, in3D, bydim, step) #return string slice, include all channels

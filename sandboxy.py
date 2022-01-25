@@ -45,13 +45,14 @@ Compute3DDice(500062, 'poem25/unet_dts3d/unet', 25, batch=10, step=3, dev='cuda'
 
 #%%
 #check how it looks
-fajl = 'dm1'
+fajl = 'dm1dts'
 fil = 'out500022_'+fajl+'.npy'
 #which slices to plot:
 s1,s2,s3 = (140,30,60)
 bydim = 1 #set to 0 when in 3d
 patchsize=25
 step=3
+dm = fajl[:2]=='dm'
 
 img = np.load(fil)
 
@@ -71,7 +72,7 @@ gt = nib.load(str(gt)).get_fdata()
 mask = list(Path('POEM', 'masks').glob(f'cropped*{fil[3:9]}*'))[0]
 mask = nib.load(str(mask)).get_fdata()
 
-leavebckg = patchsize//2
+leavebckg = (patchsize-16*dm)//2
 x, y, z = mask.shape
 tmp = mask.sum(axis=(0,1))
 startz, endz = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
@@ -80,12 +81,15 @@ startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
 tmp = mask.sum(axis=(0,2))
 starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
 startx = max(0, startx-leavebckg) 
-starty = max(0, starty-leavebckg*(bydim!=1)) 
-startz = max(0, startz-leavebckg*(bydim!=2)) 
-endx = min(x, endx+leavebckg+1+2*patchsize)
-endy = min(y, endy+leavebckg+1+2*patchsize*(bydim!=1))
-endz = min(z, endz+leavebckg+1+2*patchsize*(bydim!=2))
+starty = max(0, starty-leavebckg) 
+startz = max(0, startz-leavebckg) 
+endx = min(x, endx+leavebckg+1)
+endy = min(y, endy+leavebckg+1)
+endz = min(z, endz+leavebckg+1)
 gt = gt[startx:endx, starty:endy, startz:endz]
+pad_width = [(0,patchsize)]*3
+if bydim>0: pad_width[bydim] = (0,0)
+gt = np.pad(gt, pad_width, mode='constant')
 
 plt.subplot(2,3,4)
 plt.imshow(gt[:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
@@ -97,8 +101,51 @@ plt.subplot(2,3,6)
 plt.imshow(gt[s1,:,:].squeeze(), extent=(0,100,0,150), vmin=0, vmax=7)
 plt.axis('off')
 
+#%%
+#calc alco dices for every slice you show:
+
+#from sklearn.metrics import precision_recall_fscore_support
+
+def calcMetrics(gt,img):
+    #precrec = precision_recall_fscore_support(gt.flatten(), img.flatten())
+    metrics = np.zeros((7,4))
+    sliceinter = (gt==img)*gt
+    for clas in range(7):
+        inter = ((gt==clas)*(img==clas)).sum() #(sliceinter==clas).sum()
+        #assert inter == ((gt==clas)*(img==clas)).sum(), (inter, ((gt==clas)*(img==clas)).sum())
+        gtclas = (gt==clas).sum()
+        imclas = (img==clas).sum()
+        #recall
+        tmp = inter/gtclas if gtclas>0 else np.nan
+        metrics[clas, 1] = tmp
+        #precision
+        tmr = inter/imclas if imclas>0 else np.nan
+        metrics[clas, 2] = tmr 
+        #fscore
+        metrics[clas, 3] = np.nan if (np.isnan(tmr) or np.isnan(tmp)) else 2*tmp*tmr/(tmp+tmr)
+        #dice
+        metrics[clas, 0] = 2*inter/(gtclas+imclas) if (gtclas>0 or imclas>0) else np.nan
+    return metrics #, precrec
+ 
+ 
+metrics1 = calcMetrics(gt[s1,:,:],img[s1,:,:])
+metrics2 = calcMetrics(gt[:,s2,:],img[:,s2,:])
+metrics3 = calcMetrics(gt[:,:,s3],img[:,:,s3])
+
+np.set_printoptions(precision=3)
+print('Dice,  Recall, Precision, F1: ')
+print(metrics1)
+
+print('\nDice, Recall, Precision, F1: ')
+print(metrics2)
+
+print('\nDice, Recall, Precision, F1: ')
+print(metrics3)
+
+
+
 # %%
-fajl = 'un3D'
+fajl = 'un3Ddts'
 dcs = 'dices_'+fajl+'.npy'
 dcs = np.load(dcs)
 print(dcs[0,1:])
