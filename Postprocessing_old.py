@@ -311,7 +311,7 @@ def cutme(PID, patch, net, in3d):
     return subjlist, gt 
  
 #%% 
-cutme('500022', 25, 'UNet', False)
+#cutme('500022', 25, 'UNet', False)
 #%%
 
 def Calc3Ddices(PIDS, folder, in3d, network, best_ep=True):
@@ -371,17 +371,3 @@ def Calc3Ddices(PIDS, folder, in3d, network, best_ep=True):
 # %%
 #twen = plotOutput('poem80_dts/deepmed_w/deepmed', 'POEM80_dts', '500061', take20=[71, 64, 55, 164, 43, 47])
 
-#%%
-PIDS = ['500018', '500051', '500053', '500056', '500061', '500204', '500253','500280', '500281', '500304', '500346', '500354', '500357', '500395','500487']
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet_dts')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet_dts')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed_dts')
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'unet_dts', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'pnet_dts', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed', False)
-Calc3Ddices(PIDS, 'poem25-3D', True, 'deepmed_dts', False)

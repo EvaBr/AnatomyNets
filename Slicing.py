@@ -179,7 +179,7 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
                 samples = possible[samp, ... ]
 
                 for onesample in samples:
-                    if onesample[1] not in dict_tmp:
+                    if onesample[sliced] not in dict_tmp:
                         dict_tmp[onesample[sliced]] = []
                     dict_tmp[onesample[sliced]].append([onesample[left] for left in range(3) if left!=sliced])
             

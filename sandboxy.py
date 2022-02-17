@@ -16,40 +16,45 @@ import nibabel as nib
 #Compute3DDice(500017,'poem25_new/unet_dts/unet_dts',25, batch=20)
 #Compute3DDice(500017,'poem25_new/unet_dts/unet_dts',25, dev='cuda', step=2)
 
-#%%
-print(Compute3DDice(500062, 'poem25/deepmed1/deepmed', 25, batch=20, step=3, dev='cuda',saveout=True, savename='dm1'))
-print(Compute3DDice(500062, 'poem25/deepmed_dts1/deepmed', 25, batch=20, step=3, dev='cuda',saveout=True, savename='dm1dts'))
-print(Compute3DDice(500062, 'poem25/pnet1/pnet', 25, batch=20, step=3, dev='cuda',saveout=True,savename='pn1'))
-print(Compute3DDice(500062, 'poem25/pnet_dts1/pnet', 25, batch=20, step=3, dev='cuda',saveout=True, savename='pn1dts'))
-print(Compute3DDice(500062, 'poem25/unet1/unet', 25, batch=20, step=3, dev='cuda',saveout=True, savename='un1'))
-print(Compute3DDice(500062, 'poem25/unet_dts1/unet', 25, batch=20, step=3, dev='cuda',saveout=True, savename='un1dts'))
-
 
 #%%
-Compute3DDice(500062, 'poem25/deepmed2/deepmed', 25, batch=20, bydim=2, step=3, dev='cuda', saveout=True, savename='dm2')
-Compute3DDice(500062, 'poem25/deepmed_dts2/deepmed', 25, batch=20, bydim=2, step=3, dev='cuda', saveout=True, savename='dm2dts')
-Compute3DDice(500062, 'poem25/pnet2/pnet', 25, batch=20, bydim=2, step=3, dev='cuda', saveout=True, savename='pn2')
-Compute3DDice(500062, 'poem25/pnet_dts2/pnet', 25, batch=20, bydim=2, step=3, dev='cuda', saveout=True, savename='pn2dts')
-Compute3DDice(500062, 'poem25/unet2/unet', 25, batch=20, bydim=2, step=3, dev='cuda', saveout=True, savename='un2')
-Compute3DDice(500062, 'poem25/unet_dts2/unet', 25, batch=20, bydim=2, step=3, dev='cuda', saveout=True, savename='un2dts')
+mapa = 'poem'
+konc = '_v4'
+Compute3DDice(500062, mapa+'/deepmed1/deepmed', 25, batch=32, step=3, dev='cuda',saveout=True, savename='dm1'+konc)
+Compute3DDice(500062, mapa+'/deepmed_dts1/deepmed', 25, batch=32, step=3, dev='cuda',saveout=True, savename='dm1dts'+konc)
+Compute3DDice(500062, mapa+'/pnet1/pnet', 25, batch=32, step=3, dev='cuda',saveout=True,savename='pn1'+konc)
+Compute3DDice(500062, mapa+'/pnet_dts1/pnet', 25, batch=32, step=3, dev='cuda',saveout=True, savename='pn1dts'+konc)
+Compute3DDice(500062, mapa+'/unet1/unet', 25, batch=32, step=3, dev='cuda',saveout=True, savename='un1'+konc)
+Compute3DDice(500062, mapa+'/unet_dts1/unet', 25, batch=32, step=3, dev='cuda',saveout=True, savename='un1dts'+konc)
 
 
 #%%
-Compute3DDice(500062, 'poem25/deepmed3d/deepmed', 25, batch=10, step=3, dev='cuda', saveout=True, savename='dm3D')
-Compute3DDice(500062, 'poem25/deepmed_dts3d/deepmed', 25, batch=10, step=3, dev='cuda', saveout=True, savename='dm3Ddts')
-Compute3DDice(500062, 'poem25/pnet3d/pnet', 25, batch=10, step=3, dev='cuda', saveout=True, savename='un3D')
-Compute3DDice(500062, 'poem25/pnet_dts3d/pnet', 25, batch=10, step=3, dev='cuda', saveout=True, savename='un3Ddts')
-Compute3DDice(500062, 'poem25/unet3d/unet', 25, batch=10, step=3, dev='cuda', saveout=True, savename='pn3D')
-Compute3DDice(500062, 'poem25/unet_dts3d/unet', 25, batch=10, step=3, dev='cuda', saveout=True, savename='pn3Ddts')
+Compute3DDice(500062, mapa+'/deepmed2/deepmed', 25, batch=32, bydim=2, step=3, dev='cuda', saveout=True, savename='dm2'+konc)
+Compute3DDice(500062, mapa+'/deepmed_dts2/deepmed', 25, batch=32, bydim=2, step=3, dev='cuda', saveout=True, savename='dm2dts'+konc)
+Compute3DDice(500062, mapa+'/pnet2/pnet', 25, batch=32, bydim=2, step=3, dev='cuda', saveout=True, savename='pn2'+konc)
+Compute3DDice(500062, mapa+'/pnet_dts2/pnet', 25, batch=32, bydim=2, step=3, dev='cuda', saveout=True, savename='pn2dts'+konc)
+Compute3DDice(500062, mapa+'/unet2/unet', 25, batch=32, bydim=2, step=3, dev='cuda', saveout=True, savename='un2'+konc)
+Compute3DDice(500062, mapa+'/unet_dts2/unet', 25, batch=32, bydim=2, step=3, dev='cuda', saveout=True, savename='un2dts'+konc)
+
+
+#%%
+mapa = 'poem'
+konc = '_v4'
+Compute3DDice(500062, mapa+'/deepmed3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3D'+konc)
+Compute3DDice(500062, mapa+'/deepmed_dts3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3Ddts'+konc)
+Compute3DDice(500062, mapa+'/pnet3d/pnet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='pn3D'+konc)
+Compute3DDice(500062, mapa+'/pnet_dts3d/pnet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='pn3Ddts'+konc)
+Compute3DDice(500062, mapa+'/unet3d/unet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='un3D'+konc)
+Compute3DDice(500062, mapa+'/unet_dts3d/unet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='un3Ddts'+konc)
 
 
 #%%
 #check how it looks
-fajl = 'dm1dts'
-fil = 'out500022_'+fajl+'.npy'
+fajl = 'dm3Ddts_v3'
+fil = 'out500062_'+fajl+'.npy'
 #which slices to plot:
-s1,s2,s3 = (140,30,60)
-bydim = 1 #set to 0 when in 3d
+s1,s2,s3 = (120,35,70)
+bydim = 0 #set to 0 when in 3d
 patchsize=25
 step=3
 dm = fajl[:2]=='dm'
@@ -144,9 +149,44 @@ print(metrics3)
 
 
 
-# %%
-fajl = 'un3Ddts'
+#%% # check dices on a subject 
+np.set_printoptions(precision=3)
+fajl = 'dm3Ddts_v4'
 dcs = 'dices_'+fajl+'.npy'
 dcs = np.load(dcs)
 print(dcs[0,1:])
+
+#%%
+#check training/Val curves
+from Postprocessing_old import compare_curves
+compare_curves('poem', ['deepmed3d', 'unet3d'])
+
+
+# %%
+#get validation set class sizes for better sampling/loss settings:
+from helpers import getpid
+
+folder = 'POEM25'
+
+allpids = np.unique([getpid(str(i)) for i in Path(folder, 'VAL', 'gt').glob('*.npy')])
+allfiles = sorted([p for p in Path('POEM', 'segms').glob('*') if getpid(str(p)) in allpids])
+allmasks = sorted([p for p in Path('POEM', 'masks').glob('*') if getpid(str(p)) in allpids])
+N = len(allpids)
+classes = np.zeros((7,))
+for fil,mask in zip(allfiles, allmasks): 
+    fajl = nib.load(str(fil)).get_fdata()
+    maskca = nib.load(str(mask)).get_fdata()
+    vsi = fajl[maskca==1]
+    uniq, counts = np.unique(vsi, return_counts=True)
+    classes[uniq.astype(int)] += counts
+
+allinall = sum(classes)
+avg_classes = classes/N
+weighting = avg_classes/allinall
+
+t=1/weighting
+s=sum(t)
+print(t/s) #[0.0004 , 0.217, 0.156, 0.016, 0.337, 0.113, 0.16 ]
+#suggested weighting:
+[0.01, 0.25, 0.16, 0.05, 0.34, 0.11, 0.16]
 # %%
