@@ -323,13 +323,13 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
                 
                 
                
-        wat_tmp = np.pad(wat,(patch+16,),mode='constant')
-        fat_tmp = np.pad(fat,(patch+16,),mode='constant')
+        wat_tmp = np.pad(wat,(patch+16,),mode='symmetric')
+        fat_tmp = np.pad(fat,(patch+16,),mode='symmetric')
         gt_tmp = np.pad(gt,((0,0), (patch+16,patch+16), (patch+16,patch+16),(patch+16,patch+16)),mode='constant')
-        x_tmp = np.pad(x,(patch+16,),mode='constant')
-        y_tmp = np.pad(y,(patch+16,),mode='constant')
-        z_tmp = np.pad(z,(patch+16,),mode='constant')
-        bd_tmp = np.pad(bd,(patch+16,),mode='constant')
+        x_tmp = np.pad(x,(patch+16,),mode='symmetric')
+        y_tmp = np.pad(y,(patch+16,),mode='symmetric')
+        z_tmp = np.pad(z,(patch+16,),mode='symmetric')
+        bd_tmp = np.pad(bd,(patch+16,),mode='symmetric')
 
         for idx, center in tqdm( enumerate(kjeso) ):
             startx = center[0]+16

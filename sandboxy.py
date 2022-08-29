@@ -39,9 +39,11 @@ Compute3DDice(500062, mapa+'/unet_dts2/unet', 25, batch=32, bydim=2, step=3, dev
 
 #%%
 mapa = 'poem'
-konc = '_v4'
-Compute3DDice(500062, mapa+'/deepmed3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3D'+konc)
+konc = '_v7'
 Compute3DDice(500062, mapa+'/deepmed_dts3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3Ddts'+konc)
+Compute3DDice(500062, mapa+'/deepmed3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3D'+konc)
+
+#%%
 Compute3DDice(500062, mapa+'/pnet3d/pnet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='pn3D'+konc)
 Compute3DDice(500062, mapa+'/pnet_dts3d/pnet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='pn3Ddts'+konc)
 Compute3DDice(500062, mapa+'/unet3d/unet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='un3D'+konc)
@@ -50,7 +52,7 @@ Compute3DDice(500062, mapa+'/unet_dts3d/unet', 25, batch=32, step=3, dev='cuda',
 
 #%%
 #check how it looks
-fajl = 'dm3Ddts_v3'
+fajl = 'dm3D_v5'
 fil = 'out500062_'+fajl+'.npy'
 #which slices to plot:
 s1,s2,s3 = (120,35,70)
@@ -151,7 +153,7 @@ print(metrics3)
 
 #%% # check dices on a subject 
 np.set_printoptions(precision=3)
-fajl = 'dm3Ddts_v4'
+fajl = 'dm3Ddts_v7'
 dcs = 'dices_'+fajl+'.npy'
 dcs = np.load(dcs)
 print(dcs[0,1:])

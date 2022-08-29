@@ -29,7 +29,7 @@ def getchn(args: List[str], string:str) -> Tuple[int, List[int]]:
     return cnt, whichchans
 
 
-def getNetwork(params:str, dev:str = 'cpu') -> Tuple[Any, List, List, bool]:
+def getNetwork(params:str, dev:str = 'cpu', best:bool=True) -> Tuple[Any, List, List, bool]:
     #default settings:
     Arg = {'network': None, 'n_class':7, 'in_channels':2, 'lower_in_channels':2, 'extractor_net':'resnet34'}
     
@@ -41,7 +41,7 @@ def getNetwork(params:str, dev:str = 'cpu') -> Tuple[Any, List, List, bool]:
     tmpargs += [['in_channels', chan1], ['lower_in_channels', chan2]]
     in3D='--in3D' in args
     args = dict(tmpargs)
-    
+
     #overwrite if given in file:
     Arg.update(args)
     use_in2 = Arg['network']=='DeepMedic'
@@ -49,6 +49,8 @@ def getNetwork(params:str, dev:str = 'cpu') -> Tuple[Any, List, List, bool]:
     net = getattr(Networks, Arg['network'])(Arg['in_channels'], Arg['n_class'], Arg['lower_in_channels'], Arg['extractor_net'], in3D)
     net = net.float()
     #now we can load learned params:
+    if best:
+        params = params+'_bestepoch'
     loaded = torch.load(f"RESULTS/{params}", map_location=lambda storage, loc: storage)
     net.load_state_dict(loaded['state_dict'])
     
@@ -109,7 +111,7 @@ def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndar
 #%%
 def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int, 
             batch:int = 10, bydim:int = 1, doeval:bool = True, 
-            dev:str = 'cpu', step:int=0, saveout:bool=False, savename:str='x') -> List[float]:
+            dev:str = 'cpu', best:bool=True, step:int=0, saveout:bool=False, savename:str='x') -> List[float]:
     #OBS: in case of deepmed, patchsize means the size of output patch!
     #(i.e. if patchsize=9, the input to network will be 25x25) <-but this done in the code
     #step = in what steps you take patches. if ==0, you take nonoverlapping ones. if K, patch starts 
@@ -117,13 +119,13 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
     #saveout = whether we save the ful subject output. (for viewing and debugging)
 
     # GET NET:
-    net, in1, in2, in3D = getNetwork(netparams, dev)
+    net, in1, in2, in3D = getNetwork(netparams, dev, best)
     if doeval:
         net.eval()
     else:
         net.train()
     device = torch.device(dev)
-    print('Net loaded.')
+    print(f'Net loaded. [in1: {in1}, in2: {in2}, 3D: {in3D}]')
     # CUT AND EVAL: loop through cutting smaller pieces, moving to torch and eval
     if isinstance(PID, int): 
         PID=[PID]
