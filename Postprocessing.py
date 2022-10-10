@@ -100,7 +100,7 @@ def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndar
     endz = min(z, endz+leavebckg+1)
 
    # print(("orig.sizes:", maska.shape))
-   # print(("new slice:", (startx,endx,starty,endy,startz,endz)))
+    print(f"new slice: ({startx}:{endx},{starty}:{endy},{startz}:{endz})")
     maska = maska[startx:endx, starty:endy, startz:endz]
     allin = allin[:, startx:endx, starty:endy, startz:endz]
    # print(("new sizes:", maska.shape, allin.shape))
