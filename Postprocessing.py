@@ -1,5 +1,7 @@
 #%%
 from pathlib import Path
+from scipy import empty
+from sqlalchemy import false, true
 from tqdm import tqdm
 import numpy as np 
 import Networks
@@ -60,9 +62,11 @@ def getNetwork(params:str, dev:str = 'cpu', best:bool=True) -> Tuple[Any, List, 
     return net, whichin1, whichin2 if use_in2 else [], in3D
 
 
-def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def loadSubject(pid:int, leavebckg:int=25, pad:bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     #leavebckg==what border of bck to leave around subj (otherwise we cut the imgs so that 
     # they are as tight around subj (mask==1) as possible).
+    #but if pad=true, instead of cutting tightly around mask, we load the whole image and 
+    # #pad it with width leavebckg, by mirroring.
     dx, dy, m, g, f, w = sorted(Path('POEM').rglob(f"*{pid}*.nii"))
     # order: dtx, dty, mask, gt, fat, wat
     wat = nib.load(str(w)).get_fdata()
@@ -73,6 +77,16 @@ def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndar
     y = nib.load(str(dy)).get_fdata()       
     gt = get_one_hot(gt*maska, 7) #to make sure segms will only be done inside subj, lets multiply by mask:
    
+    #if pad:
+        # print(("orig.sizes:", maska.shape))
+    #    maska  = np.pad(maska, leavebckg, 'edge')
+    #    gt  = np.pad(gt, ((0,0),(leavebckg, leavebckg),(leavebckg, leavebckg),(leavebckg,leavebckg )), 'edge')
+    #    x  = np.pad(x, leavebckg, 'edge')
+    #    y  = np.pad(y, leavebckg, 'edge')
+    #    wat  = np.pad(wat, leavebckg, 'edge')
+    #    fat  = np.pad(fat, leavebckg, 'edge')
+        # print(("new.sizes:", maska.shape))
+
     tmp_z = np.ones(maska.shape)
     tmp = maska.sum(axis=(0,1))
     startz, endz = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
@@ -85,27 +99,33 @@ def loadSubject(pid:int, leavebckg:int) -> Tuple[np.ndarray, np.ndarray, np.ndar
 
     allin = np.stack([wat, fat, x, y, z, bd], axis=0)
     
-    tmp = maska.sum(axis=(1,2))
-    startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
-    tmp = maska.sum(axis=(0,2))
-    starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
     
     #new starts/ends based on the required border width:
-    x, y, z = maska.shape
-    startx = max(0, startx-leavebckg) 
-    starty = max(0, starty-leavebckg) 
-    startz = max(0, startz-leavebckg) 
-    endx = min(x, endx+leavebckg+1)
-    endy = min(y, endy+leavebckg+1)
-    endz = min(z, endz+leavebckg+1)
+    
+    if not pad:   
+        x, y, z = maska.shape
+        tmp = maska.sum(axis=(1,2))
+        startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+        tmp = maska.sum(axis=(0,2))
+        starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    
+        startx = max(0, startx-leavebckg) 
+        starty = max(0, starty-leavebckg) 
+        startz = max(0, startz-leavebckg) 
+        endx = min(x, endx+leavebckg+1)
+        endy = min(y, endy+leavebckg+1)
+        endz = min(z, endz+leavebckg+1)
+        # print(("orig.sizes:", maska.shape))
+        #print(f"new slice: ({startx}:{endx},{starty}:{endy},{startz}:{endz})")
+        maska = maska[startx:endx, starty:endy, startz:endz]
+        allin = allin[:, startx:endx, starty:endy, startz:endz]
+        gt = gt[:, startx:endx, starty:endy, startz:endz]
+        # print(("new sizes:", maska.shape, allin.shape))
 
-   # print(("orig.sizes:", maska.shape))
-    print(f"new slice: ({startx}:{endx},{starty}:{endy},{startz}:{endz})")
-    maska = maska[startx:endx, starty:endy, startz:endz]
-    allin = allin[:, startx:endx, starty:endy, startz:endz]
-   # print(("new sizes:", maska.shape, allin.shape))
+   
+   
     #to make sure segms will only be done inside subj, lets multiply by mask:
-    return allin*maska, gt[:, startx:endx, starty:endy, startz:endz], maska
+    return allin*maska, gt, maska
     
 
 #%%
@@ -157,12 +177,12 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
         existing.zero_()
         intersec.zero_()
 
-        allin, gt, mask = loadSubject(pid, patchsize//2)
+        allin, gt, mask = loadSubject(pid) #, patchsize//2)
     
         size_full = allin[0].shape #shape of 3d img, one channel
     
         mask = np.pad(mask, padding[1:], mode='constant')
-        gt = np.pad(gt, padding, mode='constant')
+        gt = np.pad(gt, padding, mode='constant')      
         allin = np.pad(allin, paddingall, mode='constant')
       #  print((size_full, gt.shape))
         empty_subj = torch.zeros(gt.shape[1:]) #allin.shape[1:]) #cause we dont need channels
@@ -225,7 +245,10 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
         Dices[idx, :] = 2*intersec/(existing+segmented) #calc dice from the gathering lists
         if saveout:
             #save img as npy.
-            np.save(f'out{pid}_{savename}.npy', empty_subj.cpu().numpy())
+            sx, sy, sz = empty_subj.shape
+            px, py, pz = [c[1] for c in padding[1:]]
+
+            np.save(f'out{pid}_{savename}.npy', empty_subj[0:sx-px, 0:sy-py, 0:sz-pz].cpu().numpy()) #todo: test slicing here. 
 
     print('Done.')
     #pidis = [int(p) for p in PIDS]

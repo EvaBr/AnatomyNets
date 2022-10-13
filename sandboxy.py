@@ -20,7 +20,7 @@ from helpers import CenterCropTensor3d
 
 #%%
 mapa = 'poem'
-konc = '_v4'
+konc = "_v4"
 Compute3DDice(500062, mapa+'/deepmed1/deepmed', 25, batch=32, step=3, dev='cuda',saveout=True, savename='dm1'+konc)
 Compute3DDice(500062, mapa+'/deepmed_dts1/deepmed', 25, batch=32, step=3, dev='cuda',saveout=True, savename='dm1dts'+konc)
 Compute3DDice(500062, mapa+'/pnet1/pnet', 25, batch=32, step=3, dev='cuda',saveout=True,savename='pn1'+konc)
@@ -42,7 +42,7 @@ Compute3DDice(500062, mapa+'/unet_dts2/unet', 25, batch=32, bydim=2, step=3, dev
 mapa = 'poem'
 konc = '_v8'
 Compute3DDice(500062, mapa+'/deepmed_dts3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3Ddts'+konc)
-#Compute3DDice(500062, mapa+'/deepmed3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3D'+konc)
+Compute3DDice(500062, mapa+'/deepmed3d/deepmed', 25, batch=32, step=3, dev='cuda', saveout=True, savename='dm3D'+konc)
 
 #%%
 Compute3DDice(500062, mapa+'/pnet3d/pnet', 25, batch=32, step=3, dev='cuda', saveout=True, savename='pn3D'+konc)
@@ -66,6 +66,37 @@ def plotSeg(fajl, subjnr, slicestuple=(120,35,70), patchsize=25, bydim=0):
 
     img = np.load(fil)
 
+    gt = list(Path('POEM', 'segms').glob(f'Cropped*{fil[3:9]}*'))[0]
+    gt = nib.load(str(gt)).get_fdata()
+    mask = list(Path('POEM', 'masks').glob(f'cropped*{fil[3:9]}*'))[0]
+    mask = nib.load(str(mask)).get_fdata()
+    print((gt.shape, img.shape))
+    #gt, img = CenterCropTensor3d(gt, img)
+    gx,gy,gz = gt.shape
+    img = img[:gx,:gy,:gz]
+
+
+
+    #leavebckg = (patchsize-16*dm)//2
+    #x, y, z = mask.shape
+    #tmp = mask.sum(axis=(0,1))
+    #startz, endz = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    #tmp = mask.sum(axis=(1,2))
+    #startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    #tmp = mask.sum(axis=(0,2))
+    #starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
+    #startx = max(0, startx-leavebckg) 
+    #starty = max(0, starty-leavebckg) 
+    #startz = max(0, startz-leavebckg) 
+    #endx = min(x, endx+leavebckg+1)
+    #endy = min(y, endy+leavebckg+1)
+    #endz = min(z, endz+leavebckg+1)
+    #gt = gt[startx:endx, starty:endy, startz:endz]
+    #pad_width = [(0,patchsize)]*3
+    #if bydim>0: pad_width[bydim] = (0,0)
+    #gt = np.pad(gt, pad_width, mode='constant')
+    #print((gt.shape, img.shape))
+    
     plt.figure()
     plt.subplot(2,3,1)
     plt.imshow(img[:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
@@ -79,31 +110,6 @@ def plotSeg(fajl, subjnr, slicestuple=(120,35,70), patchsize=25, bydim=0):
     plt.imshow(img[s1,:,:].squeeze(), extent=(0,100,0,150), vmin=0, vmax=7)
     plt.title('saggital OUT')
     plt.axis('off')
-
-    gt = list(Path('POEM', 'segms').glob(f'Cropped*{fil[3:9]}*'))[0]
-    gt = nib.load(str(gt)).get_fdata()
-    mask = list(Path('POEM', 'masks').glob(f'cropped*{fil[3:9]}*'))[0]
-    mask = nib.load(str(mask)).get_fdata()
-
-    leavebckg = (patchsize-16*dm)//2
-    x, y, z = mask.shape
-    tmp = mask.sum(axis=(0,1))
-    startz, endz = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
-    tmp = mask.sum(axis=(1,2))
-    startx, endx = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
-    tmp = mask.sum(axis=(0,2))
-    starty, endy = np.nonzero(tmp)[0][0], np.nonzero(tmp)[0][-1]
-    startx = max(0, startx-leavebckg) 
-    starty = max(0, starty-leavebckg) 
-    startz = max(0, startz-leavebckg) 
-    endx = min(x, endx+leavebckg+1)
-    endy = min(y, endy+leavebckg+1)
-    endz = min(z, endz+leavebckg+1)
-    gt = gt[startx:endx, starty:endy, startz:endz]
-    pad_width = [(0,patchsize)]*3
-    if bydim>0: pad_width[bydim] = (0,0)
-    gt = np.pad(gt, pad_width, mode='constant')
-
     plt.subplot(2,3,4)
     plt.imshow(gt[:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
     plt.title('axial GT')
@@ -144,9 +150,8 @@ def calcMetrics(gt,img):
         metrics[clas, 0] = 2*inter/(gtclas+imclas) if (gtclas>0 or imclas>0) else np.nan
     return metrics #, precrec
  
-def getAllMetrics(fajl, subjnr, slicetuple=(120,35,70)):
+def getAllMetrics(fajl, subjnr, slicetuple=None): #(120,35,70)):
     fil = 'out' + str(subjnr) + '_'+fajl+'.npy'
-    s1, s2, s3 = slicetuple
 
     gt = list(Path('POEM', 'segms').glob(f'Cropped*{fil[3:9]}*'))[0]
     gt = nib.load(str(gt)).get_fdata()
@@ -154,15 +159,26 @@ def getAllMetrics(fajl, subjnr, slicetuple=(120,35,70)):
 
     #crop to same size
 
-    print((gt.shape, img.shape))
-    gt, img = CenterCropTensor3d(gt, img)
+   # print((gt.shape, img.shape))
+    #gt, img = CenterCropTensor3d(gt, img)
+    gx,gy,gz = gt.shape
+    img = img[:gx,:gy,:gz]
 
-    print((gt.shape, img.shape))
+   # print((gt.shape, img.shape))
+    if slicetuple==None:
+        metrics = calcMetrics(gt, img)
+        print('\n3D METRICS')
+        print('         Dice,  Recall, Precision, F1: ')
+        for i, lst in enumerate(metrics):
+            print(f"class {i}: {lst}")
+        return {'3D': metrics}
+
+    s1, s2, s3 = slicetuple
     metrics1 = calcMetrics(gt[s1,:,:],img[s1,:,:])
     metrics2 = calcMetrics(gt[:,s2,:],img[:,s2,:])
     metrics3 = calcMetrics(gt[:,:,s3],img[:,:,s3])
 
-    np.set_printoptions(precision=3)
+    np.set_printoptions(precision=4)
 
     print('\nSAGGITAL SLICE')
     print('         Dice,  Recall, Precision, F1: ')
