@@ -95,22 +95,15 @@ def check3Dcuts(datafolder, pid, chans=0, inp2=False):
 #%%
 ############################  CUTTING #########################
 
-def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1, sampling=None):
+def cutPOEM2D(patch_size, parentoutpath, make_subsampled=True, add_dts=True, sliced=1, sampling=None):
     #sliced je lahko 0,1 ali 2. pove po katerem indexu naredimo slice. 
     #prepare folders for saving:
-    outpath = f"{outpath}/TRAIN"
+    outpath = f"{parentoutpath}/TRAIN"
     pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
     for i in ['gt','in1','in2']:
         pathlib.Path(outpath,i).mkdir(parents=True, exist_ok=True)
 
     #POEM SLICING
-    #gt_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segment_all/converted/CroppedSegmNew*")
-    #wat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_wat*")
-    #fat_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_fat*")
-    #dtx_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*x.nii")
-    #dty_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/distmaps/*y.nii")
-    #mask_paths = glob("/home/eva/Desktop/research/PROJEKT2-DeepLearning/procesiranDataset/POEM_segmentation_data_fatwat/converted/cropped*_mask.nii")
-
     gt_paths = glob("POEM/segms/CroppedSegmNew*")
     wat_paths = glob("POEM/watfat/cropped*_wat*")
     fat_paths = glob("POEM/watfat/cropped*_fat*")
@@ -154,9 +147,7 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
 
         gt = get_one_hot(gt, nb_class) #new size C x H x W x D
 
-        inx = wat.shape[1-(sliced>0)]//patch_size
-        iny = wat.shape[2-(sliced==2)]//patch_size
-        to_cut = 2 #min(4, inx*iny)
+        to_cut = 2
 
         dict_tmp = {}
 
@@ -177,21 +168,21 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
                 nr_sample = min(nr_samples, Ll)
                 samp = random.sample(range(Ll), nr_sample)
                 samples = possible[samp, ... ]
-
+               
                 for onesample in samples:
                     if onesample[sliced] not in dict_tmp:
                         dict_tmp[onesample[sliced]] = []
                     dict_tmp[onesample[sliced]].append([onesample[left] for left in range(3) if left!=sliced])
-            
+                
         for slajs, indexes in tqdm( dict_tmp.items() ):
 
-            wat_tmp = np.pad(np.squeeze(eval(f"wat[{slicing}")),(patch+16,),mode='constant')
-            fat_tmp = np.pad(np.squeeze(eval(f"fat[{slicing}")),(patch+16,),mode='constant')
-            gt_tmp = np.pad(np.squeeze(eval(f"gt[:,{slicing}")),((0,0), (patch+16,patch+16), (patch+16,patch+16)),mode='constant')
-            x_tmp = np.pad(np.squeeze(eval(f"x[{slicing}")),(patch+16,),mode='constant')
-            y_tmp = np.pad(np.squeeze(eval(f"y[{slicing}")),(patch+16,),mode='constant')
-            z_tmp = np.pad(np.squeeze(eval(f"z[{slicing}")),(patch+16,),mode='constant')
-            bd_tmp = np.pad(np.squeeze(eval(f"bd[{slicing}")),(patch+16,),mode='constant')
+            wat_tmp = np.pad(np.squeeze(eval(f"wat[{slicing}")),(patch+16,),mode='edge')
+            fat_tmp = np.pad(np.squeeze(eval(f"fat[{slicing}")),(patch+16,),mode='edge')
+            gt_tmp = np.pad(np.squeeze(eval(f"gt[:,{slicing}")),((0,0), (patch+16,patch+16), (patch+16,patch+16)),mode='edge')
+            x_tmp = np.pad(np.squeeze(eval(f"x[{slicing}")),(patch+16,),mode='edge')
+            y_tmp = np.pad(np.squeeze(eval(f"y[{slicing}")),(patch+16,),mode='edge')
+            z_tmp = np.pad(np.squeeze(eval(f"z[{slicing}")),(patch+16,),mode='edge')
+            bd_tmp = np.pad(np.squeeze(eval(f"bd[{slicing}")),(patch+16,),mode='edge')
 
             for counter,index in enumerate(indexes):
                 startx = index[0]+16
@@ -231,18 +222,18 @@ def cutPOEM2D(patch_size, outpath, make_subsampled=True, add_dts=True, sliced=1,
 
                     np.save(f"{outpath}/in2/subj{PID}_{slajs}_{counter}", allin) 
     
-    with open(f"{outpath}/datainfo.txt", "w") as info_file:
+    with open(f"{parentoutpath}/datainfo.txt", "w") as info_file:
         info_file.write(f"""Sliced by dim {sliced}. \nPatch size: {patch_size}
                                     \nDTs: {add_dts}\nsubsmpl: {make_subsampled}
                                     \nsampling: {sampling}""")
 
 #%%
-def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=None):
+def cutPOEM3D(patch_size, parentoutpath, make_subsampled=True, add_dts=True, sampling=None):
     #sampling pove koliko patchov per class samplamo iz vsakega subjekta. 
     # If not given, sampling is random. (ie may contain lots of bckg!) 
 
     #prepare folders for saving:
-    outpath = f"{outpath}/TRAIN"
+    outpath = f"{parentoutpath}/TRAIN"
     pathlib.Path(outpath).mkdir(parents=True, exist_ok=True)
     for i in ['gt','in1','in2']:
         pathlib.Path(outpath,i).mkdir(parents=True, exist_ok=True)
@@ -297,9 +288,6 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
 
         gt = get_one_hot(gt, nb_class) #new size C x H x W x D
 
-        inx = wat.shape[0]//patch_size
-        iny = wat.shape[1]//patch_size
-        inz = wat.shape[2]//patch_size
         to_cut = 5 
 
 
@@ -374,7 +362,7 @@ def cutPOEM3D(patch_size, outpath, make_subsampled=True, add_dts=True, sampling=
                 np.save(f"{outpath}/in2/subj{PID}_{idx}_0", allin) 
 
     
-    with open(f"{outpath}/datainfo.txt", "w") as info_file:
+    with open(f"{parentoutpath}/datainfo.txt", "w") as info_file:
         info_file.write(f"""Sliced 3D patches. \nPatch size: {patch_size}
                             \nDTs: {add_dts}\nsubsmpl: {make_subsampled}
                             \nsampling: {sampling}""")
@@ -434,7 +422,6 @@ def cutPOEMslices():
             np.save(f"POEM_slices/gt/subj{PID}_{slajs}_0", gt_part)
 
 
-    
 
 #%% 
 
@@ -492,16 +479,17 @@ def remove_bckg_slices(datafolder):
 # %%
 #example runs:
 
-#outpath = "POEM80"
+#outpath = "POEM25"
 #add_dts = False
 #make_subsampled = False
-#patch_size = 80
+#patch_size = 25
+#sampling = [2,5,5,5,5,5,5]
 
-#cutPOEM2D(patch_size, outpath, make_subsampled=make_subsampled, add_dts=add_dts)
-#train_val_splitPOEM('POEM80', 15)
+#cutPOEM2D(patch_size, outpath, sampling=sampling) #, make_subsampled=make_subsampled, add_dts=add_dts)
+#train_val_splitPOEM('POEM50', 15)
 
-#remove_bckg_slices('POEM80/TRAIN')
-#remove_bckg_slices('POEM80/VAL')
+#remove_bckg_slices('POEM50/TRAIN')
+#remove_bckg_slices('POEM50/VAL')
 
 
 #check2Dcuts("POEM80", "500077_30_0", True)

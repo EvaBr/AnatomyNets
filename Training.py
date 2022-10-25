@@ -54,7 +54,7 @@ def setup(args: argparse.Namespace):
         #assert loaded['name'] == args.network
         net.load_state_dict(loaded['state_dict'])
         optimizer.load_state_dict(loaded['optimizer'])
-        start_epoch = loaded['epoch']
+        start_epoch = loaded['epoch']+1
 
         # now individually transfer the optimizer parts...
         for state in optimizer.state.values():
@@ -179,12 +179,12 @@ def train(args: argparse.Namespace):
             for i in ['Loss', 'Dice']: #train_metrics:
                 val_metrics[f"val_{i}"][epoch-start_epoch, ...] = epoch_val_metrics[i]/NN
             print(f" [VAL] Loss={val_metrics['val_Loss'][epoch-start_epoch]}, GDL={GDL/numimval}, Dice={val_metrics['val_Dice'][epoch-start_epoch, ...].cpu().numpy()}")
-            val_metrics['val_GDL'][epoch-start_epoch, ...] = GDL/numim
-            val_metrics['val_GDLbin'][epoch-start_epoch, ...] = GDLbin/numim
+            val_metrics['val_GDL'][epoch-start_epoch, ...] = GDL/numimval
+            val_metrics['val_GDLbin'][epoch-start_epoch, ...] = GDLbin/numimval
 
 
             if best_avg_dice<val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean(): #we have new best epoch
-                best_epoch = epoch - start_epoch
+                best_epoch = epoch # - start_epoch
                 best_avg_dice = val_metrics['val_Dice'][epoch-start_epoch, 1:7].mean()
                 print(f"> Best epoch so far: {best_epoch}")
                 #for better eval, let's save the current net, and information about the best epoch:
@@ -204,9 +204,7 @@ def train(args: argparse.Namespace):
                 print(f'> New learning Rate: {lr}')
 
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
-
-
-
+    return
 
 
 

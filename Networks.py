@@ -133,7 +133,39 @@ class UNet(nn.Module):
       #  x5 = self.down4(x4)
       #  x = self.up4(x5, x4)
         x = self.up3(x4, x3) #x instead of x4
-        x = self.up2(x, x2)
+        x = self.up2(x, x2) #x = self.up2(x3, x2)
+        x = self.up1(x, x1)
+        return self.final(x)
+
+
+class UNetShallow(nn.Module):
+    def __init__(self, in_channels, n_classes, in_channels_lower=None, extractor_net=None, TriD=False):
+        super(UNet, self).__init__()
+
+        self.n_class = n_classes
+        self.n_chan = in_channels
+
+        self.firsttwo = DoubleConv(in_channels, 64, TriD=TriD)
+        self.down1 = DownBlock(64, 128, TriD=TriD)
+        self.down2 = DownBlock(128, 256, TriD=TriD)
+        self.up2 = UpBlock(256, TriD=TriD)
+        self.up1 = UpBlock(128, TriD=TriD)
+        if TriD:
+            self.final = nn.Sequential(
+                nn.Conv3d(64, n_classes, kernel_size=1),
+                nn.LogSoftmax(dim=1)
+            )
+        else:
+            self.final = nn.Sequential(
+                nn.Conv2d(64, n_classes, kernel_size=1),
+                nn.LogSoftmax(dim=1)
+            )
+
+    def forward(self, x_in):
+        x1 = self.firsttwo(x_in)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x = self.up2(x3, x2)
         x = self.up1(x, x1)
         return self.final(x)
 
