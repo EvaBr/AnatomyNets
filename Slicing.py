@@ -2,6 +2,7 @@
 import numpy as np
 import nibabel as nib 
 from glob import glob
+from pandas import array
 import pathlib
 import random
 import re
@@ -430,10 +431,12 @@ def cutPOEMslices():
 def train_val_splitPOEM(datafolder, to_move=[], val_subjects = 15):
     #randomly chooses val_subject pids, and moves corresponding patches to VAL datafolder. 
     #check first if TRAIN exists:
-    if not pathlib.Path(datafolder, "TRAIN").exists():
-        pathlib.Path(datafolder, "TRAIN").mkdir(parents=True)
-        for pp in ['gt', 'in1', 'in2']:
-            pathlib.Path(datafolder, pp).rename(pathlib.Path(datafolder, "TRAIN", pp))
+    #ACTUALLY NO, IT SHOULD DEF EXIST.
+    #if not pathlib.Path(datafolder, "TRAIN").exists():
+    #    pathlib.Path(datafolder, "TRAIN").mkdir(parents=True)
+    #    for pp in ['gt', 'in1', 'in2']:
+    #        pathlib.Path(datafolder, pp).rename(pathlib.Path(datafolder, "TRAIN", pp))
+    assert pathlib.Path(datafolder, "TRAIN").exists()
 
     #prepare folders for saving:
     outpath = f"{datafolder}/VAL"
@@ -443,7 +446,7 @@ def train_val_splitPOEM(datafolder, to_move=[], val_subjects = 15):
 
 
     #find all pids that should be in TRAIN atm
-    all_paths = [p for p in pathlib.Path(datafolder).glob("**/*.npy")]
+    all_paths = [p for p in pathlib.Path(datafolder, 'TRAIN').glob("**/*.npy")]
     if len(to_move)==0:
         #we choose them randomly: 
         pids = np.random.choice(np.unique([getpid(fil.name) for fil in all_paths]), size=val_subjects, replace=False)
@@ -624,3 +627,5 @@ def cutEval(patch_size, pid_list=None):
 #cutPOEM2D(50, 'POEM50', sampling=[5, 3, 4, 3, 5, 4, 4])
 #cutPOEM2D(50, 'POEM50_2', sliced=2,sampling=[5, 3, 4, 3, 5, 4, 4])
 #cutPOEM3D(50, 'POEM50_3D', sampling=[5,3,4,3,5,4,4])
+
+#%%

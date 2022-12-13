@@ -48,6 +48,26 @@ class DoubleConv(nn.Module):
         x = self.block(x)
         return self.act(x)
 
+#Vanilla CNN
+class VanillaCNN(nn.Module):
+    def __init__(self, in_channels, out_channels, in_channels_lower=None, extractor_net=None, TriD=False):
+        super(VanillaCNN, self).__init__()
+        
+        self.n_class = out_channels
+        self.n_chan = in_channels
+
+        self.arch = nn.Sequential(
+                DoubleConv(in_channels, 100, TriD=TriD),
+                DoubleConv(100, 80, TriD=TriD),
+                DoubleConv(80, 80, TriD=TriD),
+                DoubleConv(80, 64, TriD=TriD),
+                nn.Conv3d(64, 64, kernel_size=1),
+                nn.Conv3d(64, out_channels, kernel_size=1),
+                nn.LogSoftmax(dim=1))
+
+    def forward(self, x):
+        return self.arch(x)
+
 
 #2D & 3D UNET
 class DownBlock(nn.Module):
@@ -140,7 +160,7 @@ class UNet(nn.Module):
 
 class UNetShallow(nn.Module):
     def __init__(self, in_channels, n_classes, in_channels_lower=None, extractor_net=None, TriD=False):
-        super(UNet, self).__init__()
+        super(UNetShallow, self).__init__()
 
         self.n_class = n_classes
         self.n_chan = in_channels

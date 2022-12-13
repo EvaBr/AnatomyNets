@@ -10,6 +10,9 @@ POEM/
 RESULTS/
 pretrainedResNet3D/
 movedata.sh
+ComputeDT*
+*.zip
+Pipfile 
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

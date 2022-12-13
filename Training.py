@@ -149,6 +149,8 @@ def train(args: argparse.Namespace):
         train_metrics['GDL'][epoch-start_epoch, ...] = GDL/numim
         train_metrics['GDLbin'][epoch-start_epoch, ...] = GDLbin/numim
 
+        
+
         #validate
         model.eval()
         NN = len(val_loader)
@@ -203,6 +205,12 @@ def train(args: argparse.Namespace):
                 param_group['lr'] = lr
                 print(f'> New learning Rate: {lr}')
 
+        if (epoch+1)%80==0:
+            torch.save({'epoch': epoch,
+                        'state_dict': model.state_dict(),
+                        'optimizer': optimizer.state_dict()}, f'RESULTS/{args.save_as}_{epoch+1}')
+
+
     save_run(train_metrics, val_metrics, model, optimizer, args.save_as, epoch)
     return
 
@@ -224,6 +232,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--restore_from", type=str, default='', help="Stored net to restore?")
     parser.add_argument("--save_as", type=str, required=True)
+   # parser.add_argument("--save_to", type=str, required=True)
+    
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--schedule", action="store_true")
     parser.add_argument("--in3D", action="store_true", help="Use 3D version of nets? Mind that data should be 3D then!")

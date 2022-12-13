@@ -1,7 +1,5 @@
 #%%
 from pathlib import Path
-from scipy import empty
-from sqlalchemy import false, true
 from tqdm import tqdm
 import numpy as np 
 import Networks
@@ -14,7 +12,7 @@ from typing import List, Tuple, Dict, Any, Union
 from scipy.ndimage import distance_transform_edt as dt_edt
 from slicer import Slicer
 import pandas as pd
-import matplotlib.pyplot as plt
+import re
 #%%
 
 
@@ -33,7 +31,7 @@ def getchn(args: List[str], string:str) -> Tuple[int, List[int]]:
     return cnt, whichchans
 
 
-def getNetwork(params:str, dev:str = 'cpu', best:bool=True) -> Tuple[Any, List, List, bool]:
+def getNetwork(params:str, dev:str = 'cpu', best:Union[bool,str]=True) -> Tuple[Any, List, List, bool]:
     #default settings:
     Arg = {'network': None, 'n_class':7, 'in_channels':2, 'lower_in_channels':2, 'extractor_net':'resnet34'}
     
@@ -53,7 +51,9 @@ def getNetwork(params:str, dev:str = 'cpu', best:bool=True) -> Tuple[Any, List, 
     net = getattr(Networks, Arg['network'])(Arg['in_channels'], Arg['n_class'], Arg['lower_in_channels'], Arg['extractor_net'], in3D)
     net = net.float()
     #now we can load learned params:
-    if best:
+    if isinstance(best, str):
+        params = params+best
+    elif best:
         params = params+'_bestepoch'
     loaded = torch.load(f"RESULTS/{params}", map_location=lambda storage, loc: storage)
     net.load_state_dict(loaded['state_dict'])
@@ -132,15 +132,17 @@ def loadSubject(pid:int, leavebckg:int=25, cutit:bool = False) -> Tuple[np.ndarr
 #%%
 def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int, 
             batch:int = 32, bydim:int = 1, doeval:bool = True, 
-            dev:str = 'cuda', best:bool=True, step:int=0, saveout:bool=False, savename:str='x') -> List[float]:
+            dev:str = 'cuda', best:Union[bool,str]=True, step:int=0, saveout:bool=False, savename:str='x') -> List[float]:
     #OBS: in case of deepmed, patchsize means the size of output patch!
     #(i.e. if patchsize=9, the input to network will be 25x25) <-but this done in the code
     #step = in what steps you take patches. if ==0, you take nonoverlapping ones. if K, patch starts 
     # at prev_patch_start+K.
     #saveout = whether we save the ful subject output. (for viewing and debugging)
-
+    Path(savename).parent.mkdir(parents=True, exist_ok=True)
     bestorlast='LAST'
-    if best:
+    if isinstance(best, str):
+        bestorlast=best
+    elif best:
         bestorlast='BEST'
     # GET NET:
     net, in1, in2, in3D = getNetwork(netparams, dev, best)
@@ -247,7 +249,7 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
                        # print(paddingup)
                         
                         #tmp = torch.nn.functional.pad(tmp, paddingup)
-                        nsls = re.findall(r"\d+", slajs[2:]) 
+                        nsls = [int(gg) for gg in re.findall(r"\d+", slajs[2:])]
                         novslajs = f"{nsls[0]+halfpad}:{nsls[0]+halfpad+step}, {nsls[2]+halfpad}:{nsls[2]+halfpad+step}, {nsls[4]+halfpad}:{nsls[4]+halfpad+step}"
 
                         #eval(f'empty_subj[{slajs[2:]}].copy_(tmp)')
@@ -260,8 +262,8 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
             #save img as npy.
             sx, sy, sz = empty_subj.shape
             px, py, pz = [c[1] for c in padding[1:]]
-
-            np.save(f'RESULTS/OUTS/out{pid}_{savename}_{bestorlast}.npy', empty_subj[0:sx-px, 0:sy-py, 0:sz-pz].cpu().numpy()) 
+            pathtosubj = str(Path(savename).parent) #RESULTS/OUTS/
+            np.save(f'{pathtosubj}/out{pid}_{bestorlast}.npy', empty_subj[0:sx-px, 0:sy-py, 0:sz-pz].cpu().numpy()) 
             #todo: test slicing here. 
 
     print('Done.')
@@ -269,234 +271,12 @@ def Compute3DDice(PID:Union[int, List[int]], netparams:str, patchsize:int,
  #   dices = np.concatenate((np.array(PID)[:,None], Dices.cpu().numpy()), axis=1)
  #   np.save(f'dices_{savename}.npy', dices)
     tabela = pd.DataFrame(Dices.cpu().numpy(), index=[PID], columns=['bckg', 'bladder', 'kidney1', 'liver', 'pancreas', 'spleen', 'kidney2'])
-    tabela.to_csv(f'RESULTS/OUTS/dices_{savename}.csv', mode='a', index_label=bestorlast)
+    tabela.to_csv(f'{savename}.csv', mode='a', index_label=bestorlast)
     
     return tabela
 
 #DO :  torch.cuda.empty_cache() after each 3dDice calc!!
-#%%
-torch.cuda.empty_cache()
-
-a = Compute3DDice([500056, 500304], 'un_2/unet', 25, 
-            best=False, step=4, saveout=True, savename='un2')
-torch.cuda.empty_cache()
-print(a)
-
-
-a = Compute3DDice([500056, 500304], 'un_4/unet', 25, 
-            best=False, step=4, saveout=True, savename='un4')
-torch.cuda.empty_cache()
-print(a)
-
-
-a = Compute3DDice([500056, 500304], 'un_6/unet', 25, 
-            best=True, step=4, saveout=True, savename='un6')
-torch.cuda.empty_cache()
-print(a)
-
-
-a = Compute3DDice([500056, 500304], 'un_8/unet', 25, 
-            best=True, step=4, saveout=True, savename='un8')
-torch.cuda.empty_cache()
-print(a)
-
- #%%
-#another way of calcng Dice per subject: (tho can only be done after CalcDice3D)
-fajl = 'RESULTS/OUTS/UN-3layer/out500056_un2_LAST.npy'
-out = np.load(fajl)
-t=7 #set this to (patchsize-step)//2, needed for out-files made with old CalculateDice3D
-s1,s2,s3=out.shape
-out = out[:s1-t, :s2-t, :s3-t]
-x, gt, maska = loadSubject(500056)
-
-gt = gt[:, t:, t: , t:]
-out_oh = get_one_hot(out, 7)
-intersection=np.einsum("cwhd,cwhd->c", out_oh, gt)
-union=(np.einsum("cwhd->c", out_oh) + np.einsum("cwhd->c", gt))
-
-dices = (2 * intersection + 1e-10) / (union + 1e-10)
 
 
 
 #%%
-#to check best/last GDls of validation:
-nr = 1
-epoch = 23 #22, 24, 25, 32, 43, 36, 48
-pdf = pd.read_csv(f'RESULTS/un_{nr}/unet.csv', header=0, index_col=0)
-#(pdf.loc[str(epoch)]['val_GDLbin'], pdf.loc[49]['val_GDLbin'])
-pdf.iloc['val_GDLbin'].idxmax()
-
-
-#%%
-def plotSeg(pathtofajl, slicestuple=(90,35,130), t=0):
-    #fajl = 'dm1dts_v4'
-    #fil = 'RESULTS/OUTS/out' + str(subjnr) + '_'+fajl+'.npy'
-    fil = pathtofajl
-    subjnr = re.findall("500\d+", fil)[0]
-
-    #which slices to plot:
-    s1,s2,s3 = slicestuple 
-    #bydim = 0 #set to 0 when in 3d
-
-    img = np.load(fil)
-    
-    gt = list(Path('POEM', 'segms').glob(f'Cropped*{subjnr}*'))[0]
-    gt = nib.load(str(gt)).get_fdata()
-    mask = list(Path('POEM', 'masks').glob(f'cropped*{subjnr}*'))[0]
-    mask = nib.load(str(mask)).get_fdata()
-    print((gt.shape, img.shape))
-    #gt, img = CenterCropTensor3d(gt, img)
-    #
-    #gx,gy,gz = gt.shape
-    #img = img[:gx,:gy,:gz]
-    
-    sh1,sh2,sh3=gt.shape
-    img = img[:sh1-t,:sh2-t,:sh3-t]
-    gt = gt[t:,t:,t:]
-
-    plt.figure(figsize=(10,10))
-    plt.subplot(3,3,1)
-    plt.imshow(img[:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
-    plt.title('axial OUT')
-    plt.axis('off')
-    plt.subplot(3,3,2)
-    plt.imshow(img[:,s2,:].squeeze(), vmin=0, vmax=7)
-    plt.title('coronal OUT')
-    plt.axis('off')
-    plt.subplot(3,3,3)
-    plt.imshow(img[s1,:,:].squeeze(), extent=(0,100,0,150), vmin=0, vmax=7)
-    plt.title('saggital OUT')
-    plt.subplot(3,3,4)
-    plt.imshow(gt[:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
-    plt.title('axial GT')
-    plt.axis('off')
-    plt.subplot(3,3,5)
-    plt.imshow(gt[:,s2,:].squeeze(), vmin=0, vmax=7)
-    plt.title('coronal GT')
-    plt.axis('off')
-    plt.subplot(3,3,6)
-    plt.imshow(gt[s1,:,:].squeeze(), extent=(0,100,0,150), vmin=0, vmax=7)
-    plt.title('sagital GT')
-    plt.axis('off')
-
-
-    newim = np.zeros((3,sh1-t,sh2-t,sh3-t))
-    newim[0,...] = gt
-    newim[1,...] = img
-
-    plt.subplot(3,3,7)
-    plt.imshow(newim[:,:,:,s3].squeeze().T, extent=(0,100,0,150), vmin=0, vmax=7)
-    plt.title('axial GT')
-    plt.axis('off')
-    plt.subplot(3,3,8)
-    plt.imshow(np.transpose(newim[:,:,s2,:].squeeze(),(1,2,0)), vmin=0, vmax=7)
-    plt.title('coronal GT')
-    plt.axis('off')
-    plt.subplot(3,3,9)
-    plt.imshow(np.transpose(newim[:,s1,:,:].squeeze(),(1,2,0)), extent=(0,100,0,150), vmin=0, vmax=7)
-    plt.title('sagital GT')
-    plt.axis('off')
-
-
-#%%
-def compare_curves(result_folder, list_of_names, plot_names = None, individ_Dices=[0,1,2,3,4,5,6]):
-#        plot_names = kako jih imenovat v plotu. If none, reuse list_of_names
-#        individ_dices = which individual dices to plot the curves for (if empty, plots only GDL and Loss"""
-
-    if plot_names==None:
-        plot_names = list_of_names
-    #read in metrics
-    pot = Path('RESULTS', result_folder)
-    #metrics = {plotname: pd.read_csv(f"RESULTS/{name}.csv") for plotname,name in zip(plot_names, list_of_names)}
-    metrics = {plotname: pd.read_csv(list(Path(pot, name).rglob('*.csv'))[0]) for plotname,name in zip(plot_names, list_of_names)}
-    Dice_names = ['Dice_bck','Dice_Bladder', 'Dice_KidneyL', 'Dice_Liver', 'Dice_Pancreas', 'Dice_Spleen', 'Dice_KidneyR']
-    to_plot = ['Loss'] + [Dice_names[i] for i in individ_Dices]
-
-    L = len(to_plot)
-    cols, rows = min(3,L), np.ceil(L/3)
-    for tip in [("", "TRAINING"), ("val_", "VALIDATION")]:
-        plt.figure(figsize = (cols*7,rows*5))
-        plt.suptitle(tip[1])
-        for idx, what in enumerate(to_plot):
-            plt.subplot(rows, cols, idx+1)
-            plt.title(what)
-            for name in metrics:
-                plt.plot(getattr(metrics[name], f"{tip[0]}{what}"), label=name)
-            plt.legend()
-        plt.show()
-
-
-def calcMetrics(gt,img):
-    #precrec = precision_recall_fscore_support(gt.flatten(), img.flatten())
-    metrics = np.zeros((7,4))
-    #print((gt.shape, img.shape))
-    
-    for clas in range(7):
-        inter = ((gt==clas)*(img==clas)).sum() #(sliceinter==clas).sum()
-    
-        gtclas = (gt==clas).sum()
-        imclas = (img==clas).sum()
-        #recall
-        tmp = inter/gtclas if gtclas>0 else np.nan
-        metrics[clas, 1] = tmp
-        #precision
-        tmr = inter/imclas if imclas>0 else np.nan
-        metrics[clas, 2] = tmr 
-        #fscore
-        metrics[clas, 3] = np.nan if (np.isnan(tmr) or np.isnan(tmp)) else 2*tmp*tmr/(tmp+tmr)
-        #dice
-        metrics[clas, 0] = 2*inter/(gtclas+imclas) if (gtclas>0 or imclas>0) else np.nan
-    return metrics #, precrec
- 
-def getAllMetrics(fajl, subjnr, slicetuple=None): #(120,35,70)):
-    fil = 'out' + str(subjnr) + '_'+fajl+'.npy'
-
-    gt = list(Path('POEM', 'segms').glob(f'Cropped*{fil[3:9]}*'))[0]
-    gt = nib.load(str(gt)).get_fdata()
-    img = np.load(fil)
-
-   # print((gt.shape, img.shape))
-
-    #crop to same size <-- shouldn't be needed anymore, as saving is fixed
-    #gt, img = CenterCropTensor3d(gt, img)
-    ####
-    #gx,gy,gz = gt.shape
-    #img = img[:gx,:gy,:gz]
-    ####
-
-   # print((gt.shape, img.shape))
-    if slicetuple==None:
-        metrics = calcMetrics(gt, img)
-        print('\n3D METRICS')
-        print('         Dice,  Recall, Precision, F1: ')
-        for i, lst in enumerate(metrics):
-            print(f"class {i}: {lst}")
-        return {'3D': metrics}
-
-    s1, s2, s3 = slicetuple
-    metrics1 = calcMetrics(gt[s1,:,:],img[s1,:,:])
-    metrics2 = calcMetrics(gt[:,s2,:],img[:,s2,:])
-    metrics3 = calcMetrics(gt[:,:,s3],img[:,:,s3])
-
-    np.set_printoptions(precision=4)
-
-    print('\nSAGGITAL SLICE')
-    print('         Dice,  Recall, Precision, F1: ')
-    for i, lst in enumerate(metrics1):
-        print(f"class {i}: {lst}")
-
-
-    print('\nCORONAL SLICE')
-    print('         Dice, Recall, Precision, F1: ')
-    for i, lst in enumerate(metrics2):
-        print(f"class {i}: {lst}")
-
-    print('\nAXIAL SLICE')
-    print('         Dice, Recall, Precision, F1: ')
-    for i, lst in enumerate(metrics3):
-        print(f"class {i}: {lst}")
-
-    return {'sagital': metrics1, 'coronal': metrics2, 'axial': metrics3}
-
-
-# %%
